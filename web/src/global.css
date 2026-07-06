@@ -1,0 +1,86 @@
+html,
+body {
+    min-height: 100vh;
+    background-color: #161b23;
+    background-image:
+        linear-gradient(to right, rgb(128 128 128 / 5%) 1px, transparent 1px),
+        linear-gradient(to bottom, rgb(128 128 128 / 5%) 1px, transparent 1px);
+    background-size: 60px 60px;
+    background-attachment: fixed;
+    position: relative;
+}
+
+#root {
+    height: 100vh;
+}
+
+.animated-background {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background:
+        radial-gradient(ellipse 60% 40% at 25% 40%, rgb(151 117 250 / 8%), transparent 50%),
+        radial-gradient(ellipse 50% 50% at 85% 85%, rgb(34 211 238 / 6%), transparent 50%);
+}
+
+.header-wrapper {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(12px);
+    background: rgb(22 27 35 / 80%);
+    border-bottom: 1px solid rgb(255 255 255 / 5%);
+
+    @media (width >= 768px) {
+        border-radius: 0 0 var(--mantine-radius-lg) var(--mantine-radius-lg);
+    }
+}
+
+.logo-text-highlight {
+    color: var(--mantine-color-cyan-4);
+}
+
+.logo-text-normal {
+    color: white;
+}
+
+.info-card-cyan {
+    background: linear-gradient(135deg, rgb(34 211 238 / 10%) 0%, rgb(6 182 212 / 5%) 100%);
+    border: 1px solid rgb(34 211 238 / 20%);
+}
+
+.info-card-violet {
+    background: linear-gradient(135deg, rgb(151 117 250 / 10%) 0%, rgb(132 94 247 / 5%) 100%);
+    border: 1px solid rgb(151 117 250 / 20%);
+}
+
+.info-card-green {
+    background: linear-gradient(135deg, rgb(64 192 87 / 10%) 0%, rgb(55 178 77 / 5%) 100%);
+    border: 1px solid rgb(64 192 87 / 20%);
+}
+
+.info-card-red {
+    background: linear-gradient(135deg, rgb(250 82 82 / 10%) 0%, rgb(224 49 49 / 5%) 100%);
+    border: 1px solid rgb(250 82 82 / 20%);
+}
+
+.info-card-yellow {
+    background: linear-gradient(135deg, rgb(250 176 5 / 10%) 0%, rgb(245 159 0 / 5%) 100%);
+    border: 1px solid rgb(250 176 5 / 20%);
+}
+
+.info-card-blue {
+    background: linear-gradient(135deg, rgb(34 139 230 / 10%) 0%, rgb(28 126 214 / 5%) 100%);
+    border: 1px solid rgb(34 139 230 / 20%);
+}
+
+.info-card-teal {
+    background: linear-gradient(135deg, rgb(32 201 151 / 10%) 0%, rgb(18 184 134 / 5%) 100%);
+    border: 1px solid rgb(32 201 151 / 20%);
+}
+
+.info-card-orange {
+    background: linear-gradient(135deg, rgb(253 126 20 / 10%) 0%, rgb(247 103 7 / 5%) 100%);
+    border: 1px solid rgb(253 126 20 / 20%);
+}

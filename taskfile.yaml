@@ -1,0 +1,61 @@
+version: "3"
+
+output: prefixed
+
+env:
+  CGO_ENABLED: 0
+  IMAGE_DEV: ko.local/subpage
+
+tasks:
+  web:install:
+    dir: web
+    cmds: [bun install]
+
+  web:build:
+    dir: web
+    cmds: [rm -rf dist && bun run build]
+
+  build:
+    desc: Build binary
+    deps: [web:build]
+    cmds:
+      - go build -ldflags="-s -w" -trimpath -o bin/subpage .
+
+  lint:
+    desc: Run go vet & lint
+    cmds:
+      - go mod tidy
+      - go fmt ./...
+      - go vet ./...
+      - go test -cover ./...
+
+  update:
+    desc: Update dependencies
+    cmds:
+      - go get -u ./...
+      - cd web && bun update
+
+  dev:web:
+    dir: web
+    cmds: [bun run dev]
+
+  dev:api:
+    cmds:
+      - go run . --no-web --debug
+
+  snapshot:
+    desc: Build a local release snapshot with goreleaser (no publish)
+    cmds:
+      - goreleaser --snapshot --clean --skip=validate
+
+  release:
+    desc: Cut a real release with goreleaser (run in CI, needs a git tag)
+    deps: [web:build]
+    cmds:
+      - goreleaser release --clean --skip=validate
+
+  docker:
+    desc: Build a local test container image with ko
+    deps: [web:build]
+    cmds:
+      - KO_DOCKER_REPO=$IMAGE_DEV ko build . --bare

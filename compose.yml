@@ -1,0 +1,24 @@
+services:
+    subpage:
+        image: ghcr.io/lentryd/subpage:latest
+        container_name: subpage
+        hostname: subpage
+        restart: always
+        env_file:
+            - .env
+        ports:
+            - "${SUBPAGE_PORT}:3000"
+        networks:
+            - remnawave-network
+        labels:
+            - "traefik.enable=true"
+            - "traefik.http.routers.subpage.rule=Host(`${SUBPAGE_DOMAIN}`)"
+            - "traefik.http.routers.subpage.tls=true"
+            - "traefik.http.routers.subpage.entrypoints=web,websecure"
+            - "traefik.http.routers.subpage.tls.certresolver=myresolver"
+            - "traefik.http.services.subpage.loadbalancer.server.port=${SUBPAGE_PORT}"
+
+networks:
+    remnawave-network:
+        driver: bridge
+        external: true

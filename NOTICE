@@ -1,0 +1,28 @@
+This project is a derivative work of remnawave/subscription-page
+(https://github.com/remnawave/subscription-page), rewritten from
+NestJS/TypeScript to Go (Fiber) to reduce memory footprint and binary
+size. The following are ported/re-implemented from the original, with
+matching behavior:
+
+- Route handling for the subscription page: shortUuid / clientType
+  resolution, app-config route, static asset priority
+  (internal/api/handlers, internal/pkg/subpage)
+- Middleware chain: request logging, no-robots header, reverse-proxy /
+  HTTPS enforcement, real-IP extraction, assets session-cookie check,
+  and the anti-probing "kill the TCP connection" behavior on rejected
+  or unmatched requests (internal/api/middleware)
+- Session cookie JWT issuance/verification and subpage-config UUID
+  encryption (AES-256-GCM, iv||tag||ciphertext layout, matching the
+  original's Node crypto module output) (internal/pkg/subpage)
+- Ignored-header list used when proxying raw subscription responses,
+  and the panel API client's request/response shape
+  (internal/pkg/subpage, internal/api/handlers)
+
+As a derivative work, this project is distributed under the GNU
+Affero General Public License v3.0 (AGPL-3.0), the same license as
+the original. See LICENSE for the full license text.
+
+Copyright (C) 2025 Remnawave <https://github.com/remnawave>
+  (original remnawave/subscription-page)
+Copyright (C) 2026 Victor
+  (this Go rewrite)

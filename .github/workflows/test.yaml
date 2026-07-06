@@ -1,0 +1,57 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.go"
+      - "**/*.ts"
+      - "**/*.tsx"
+      - "go.mod"
+      - "go.sum"
+      - "web/package.json"
+  pull_request:
+    branches: [main]
+    paths:
+      - "**/*.go"
+      - "**/*.ts"
+      - "**/*.tsx"
+      - "go.mod"
+      - "go.sum"
+      - "web/package.json"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Build frontend
+        working-directory: web
+        run: bun install && bun run build
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+
+      - name: Lint and test
+        run: |
+          go mod tidy
+          go mod verify
+          go fmt ./...
+          go vet ./...
+          go test ./...
+
+      - name: Run GolangCI-Lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          args: --timeout=10m
+
+      - name: Build
+        run: go build -ldflags="-s -w" -o bin/
