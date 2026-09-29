@@ -22,6 +22,10 @@ type Config struct {
 	CustomSubPrefix   string
 	TrustProxy        string
 	InternalJWTSecret string
+
+	// Path to the add-ons YAML file (extra users whose configs are appended
+	// to the main subscription, see internal/pkg/addon). Missing = none.
+	AddonsConfigPath string
 }
 
 func New(port string, noWeb, debug bool) *Config {
@@ -36,6 +40,8 @@ func New(port string, noWeb, debug bool) *Config {
 		CustomSubPrefix:   os.Getenv("CUSTOM_SUB_PREFIX"),
 		TrustProxy:        getenvDefault("TRUST_PROXY", "1"),
 		InternalJWTSecret: os.Getenv("INTERNAL_JWT_SECRET"),
+
+		AddonsConfigPath: getenvDefault("ADDONS_CONFIG", "addons.yml"),
 	}
 
 	if err := cfg.validate(); err != nil {

@@ -3,6 +3,7 @@ package api
 
 import (
 	"context"
+	"log"
 	"log/slog"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"subpage/internal/api/handlers"
 	"subpage/internal/api/middleware"
 	"subpage/internal/config"
+	"subpage/internal/pkg/addon"
 	"subpage/internal/pkg/subpage"
 )
 
@@ -24,6 +26,14 @@ type Server struct {
 func New(cfg *config.Config) *Server {
 	panel := subpage.NewPanelClient(cfg.RemnawavePanelURL, cfg.RemnawaveAPIToken)
 	configStore := subpage.NewConfigStore(panel, cfg.InternalJWTSecret, cfg.SubpageConfigUUID)
+	addonsCfg, err := addon.LoadConfig(cfg.AddonsConfigPath)
+	if err != nil {
+		log.Fatalf("invalid add-ons config %s: %v", cfg.AddonsConfigPath, err)
+	}
+	if len(addonsCfg.Addons) > 0 {
+		slog.Info("add-ons enabled", "path", cfg.AddonsConfigPath, "count", len(addonsCfg.Addons))
+	}
+	addonService := addon.NewService(panel, addonsCfg)
 
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
@@ -37,7 +47,7 @@ func New(cfg *config.Config) *Server {
 		ProxyHeader:             fiber.HeaderXForwardedFor,
 	})
 	app.Use(recover.New())
-	registerRoutes(app, middleware.New(cfg), handlers.NewSubpage(cfg, panel, configStore), cfg.NoWeb)
+	registerRoutes(app, middleware.New(cfg), handlers.NewSubpage(cfg, panel, configStore, addonService), cfg.NoWeb)
 
 	return &Server{
 		app:         app,

@@ -19,6 +19,22 @@ Copy `.env.example` to `.env` and fill in:
 | `INTERNAL_JWT_SECRET` | yes | Signs the session cookie and encrypts subpage-config uuids; keep it stable |
 | `SUBPAGE_CONFIG_UUID` | no | Default subpage config uuid for single-tenant setups |
 | `CUSTOM_SUB_PREFIX` | no | Global route prefix, if your panel uses one |
+| `ADDONS_CONFIG` | no | Path to the add-ons file (default `addons.yml`; `/etc/subpage/addons.yml` in `compose.yml`) |
+
+### Add-ons
+
+An add-on is a second Remnawave user named after the main one with a fixed
+prefix and/or suffix, e.g. `premium_<username>`, typically created by billing
+for a paid option with its own squad and traffic limit. When a client
+fetches the main subscription, the configs of every existing add-on user
+are appended to it, renamed to show the add-on's remaining traffic.
+Non-active add-ons can be shown as an unusable placeholder config with an
+explanatory name (e.g. "traffic limit reached, top up to continue").
+
+Copy `addons.example.yml` to `addons.yml` next to `compose.yml` and edit it.
+Without the file nothing changes. Add-on users are looked up only by the
+username the panel returns for the requested subscription; the response
+headers (`subscription-userinfo`, etc.) always come from the main user.
 
 ## Run
 

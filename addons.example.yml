@@ -1,0 +1,33 @@
+# Add-ons: extra Remnawave users whose configs are appended to the main
+# user's subscription. Copy to addons.yml (next to compose.yml) and edit.
+#
+# For a main user "alice", an add-on with prefix "premium_" looks up the
+# user "premium_alice". If it exists and is ACTIVE, its configs are added to
+# alice's subscription (all formats: base64, xray-json, sing-box, mihomo)
+# with names rewritten by `remark`.
+
+# Max time for all add-on lookups of one request. On timeout the main
+# subscription is served alone.
+timeout: 2s
+
+addons:
+  - name: premium        # only for logs
+    prefix: premium_     # add-on username = prefix + main username + suffix
+    # suffix: _premium
+
+    # Name of each add-on config. Placeholders:
+    #   {remark}     original config name
+    #   {remaining}  traffic left, GB (one decimal)
+    #   {limit}      traffic limit, GB
+    #   {used}       traffic used, GB
+    remark: "⭐ Premium · {remark} · {remaining} of {limit} GB left"
+    # Used when the add-on user has no traffic limit. Defaults to `remark`.
+    remarkUnlimited: "⭐ Premium · {remark} · unlimited"
+
+    # When the add-on user is not ACTIVE, one unusable placeholder config
+    # (0.0.0.0:1) with this name is added instead. Statuses: LIMITED,
+    # EXPIRED, DISABLED. A missing or empty status adds nothing.
+    stubs:
+      LIMITED: "⭐ Premium: traffic limit reached, top up to continue"
+      EXPIRED: "⭐ Premium: subscription expired, renew to continue"
+      # DISABLED: ""

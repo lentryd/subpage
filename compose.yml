@@ -6,6 +6,11 @@ services:
         restart: always
         env_file:
             - .env
+        environment:
+            ADDONS_CONFIG: /etc/subpage/addons.yml
+        volumes:
+            # Optional: extra users appended to subscriptions, see addons.example.yml
+            - ./addons.yml:/etc/subpage/addons.yml:ro
         ports:
             - "${SUBPAGE_PORT}:3000"
         networks:

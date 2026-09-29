@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -13,6 +15,7 @@ import (
 
 	"subpage/internal/api/middleware"
 	"subpage/internal/config"
+	"subpage/internal/pkg/addon"
 	"subpage/internal/pkg/subpage"
 	"subpage/web"
 )
@@ -51,10 +54,11 @@ type Subpage struct {
 	cfg         *config.Config
 	panel       *subpage.PanelClient
 	configStore *subpage.ConfigStore
+	addons      *addon.Service
 }
 
-func NewSubpage(cfg *config.Config, panel *subpage.PanelClient, configStore *subpage.ConfigStore) *Subpage {
-	return &Subpage{cfg: cfg, panel: panel, configStore: configStore}
+func NewSubpage(cfg *config.Config, panel *subpage.PanelClient, configStore *subpage.ConfigStore, addons *addon.Service) *Subpage {
+	return &Subpage{cfg: cfg, panel: panel, configStore: configStore, addons: addons}
 }
 
 // AppConfigHandler serves the decrypted subpage raw config to the SPA.
@@ -120,10 +124,71 @@ func (h *Subpage) serveSubscriptionPage(c *fiber.Ctx, shortUUID, clientType stri
 		return h.returnWebpage(c, shortUUID)
 	}
 
+	if h.addons.Enabled() {
+		return h.serveWithAddons(c, shortUUID, clientType, clientIP)
+	}
+
 	resp, err := h.panel.GetSubscription(shortUUID, clientType, clientIP, headersFromFiber(c))
 	if err != nil || resp == nil {
 		return middleware.KillConnection(c)
 	}
+	return sendSubscription(c, resp, resp.Body)
+}
+
+// serveWithAddons fetches the main subscription and, in parallel, the
+// configured add-on users (e.g. premium_<username>), then appends their
+// configs. Any add-on failure (timeout, 5xx, unparsable payload) just skips
+// that add-on. Headers always come from the main response only.
+func (h *Subpage) serveWithAddons(c *fiber.Ctx, shortUUID, clientType, clientIP string) error {
+	forward := headersFromFiber(c)
+	// Bodies must be merged, so let net/http negotiate and decode
+	// compression instead of passing the client's Accept-Encoding through.
+	forward.Del("Accept-Encoding")
+
+	type resolved struct {
+		mainUsername string
+		results      []addon.Result
+		err          error
+	}
+	addonsCh := make(chan resolved, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), h.addons.Timeout())
+		defer cancel()
+		username, results, err := h.addons.Resolve(ctx, shortUUID, clientType, clientIP, forward.Clone())
+		addonsCh <- resolved{username, results, err}
+	}()
+
+	resp, err := h.panel.GetSubscription(shortUUID, clientType, clientIP, forward)
+	if err != nil || resp == nil {
+		return middleware.KillConnection(c)
+	}
+	r := <-addonsCh
+	if r.err != nil {
+		slog.Error("add-ons skipped", "shortUuid", shortUUID, "err", r.err)
+	}
+
+	body := resp.Body
+	for _, res := range r.results {
+		added := 0
+		if resp.OK && res.Addition != nil {
+			merged, n, err := addon.Merge(body, *res.Addition)
+			if err != nil {
+				res.Err = fmt.Errorf("merge: %w", err)
+			} else {
+				body, added = merged, n
+			}
+		}
+		attrs := []any{"mainUsername", r.mainUsername, "addon", res.Addon, "found", res.Found, "status", res.Status, "added", added}
+		if res.Err != nil {
+			slog.Error("add-on skipped", append(attrs, "err", res.Err)...)
+		} else {
+			slog.Info("add-on served", attrs...)
+		}
+	}
+	return sendSubscription(c, resp, body)
+}
+
+func sendSubscription(c *fiber.Ctx, resp *subpage.PanelResponse, body []byte) error {
 	for k, vs := range resp.Headers {
 		if ignoredHeaders[strings.ToLower(k)] {
 			continue
@@ -132,7 +197,7 @@ func (h *Subpage) serveSubscriptionPage(c *fiber.Ctx, shortUUID, clientType stri
 			c.Response().Header.Add(k, v)
 		}
 	}
-	return c.Status(resp.Status).Send(resp.Body)
+	return c.Status(resp.Status).Send(body)
 }
 
 func (h *Subpage) returnWebpage(c *fiber.Ctx, shortUUID string) error {

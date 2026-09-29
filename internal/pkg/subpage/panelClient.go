@@ -2,6 +2,7 @@ package subpage
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -39,11 +40,21 @@ type PanelResponse struct {
 }
 
 func (c *PanelClient) do(method, path, clientIP string, extraHeaders http.Header, body []byte) (*PanelResponse, error) {
+	return c.doCtx(context.Background(), method, path, clientIP, extraHeaders, body)
+}
+
+// Get is a generic GET against the panel API; callers build the path
+// themselves. ctx bounds the whole request.
+func (c *PanelClient) Get(ctx context.Context, path, clientIP string, extraHeaders http.Header) (*PanelResponse, error) {
+	return c.doCtx(ctx, http.MethodGet, path, clientIP, extraHeaders, nil)
+}
+
+func (c *PanelClient) doCtx(ctx context.Context, method, path, clientIP string, extraHeaders http.Header, body []byte) (*PanelResponse, error) {
 	var bodyReader io.Reader
 	if body != nil {
 		bodyReader = bytes.NewReader(body)
 	}
-	req, err := http.NewRequest(method, c.baseURL+path, bodyReader)
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bodyReader)
 	if err != nil {
 		return nil, err
 	}
