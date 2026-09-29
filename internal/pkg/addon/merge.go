@@ -6,8 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
+	"reflect"
+	"regexp"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"gopkg.in/yaml.v3"
 )
@@ -328,12 +333,29 @@ func mergeSingbox(main []byte, add Addition) ([]byte, int, error) {
 		tags = append(tags, tag)
 	}
 
-	// Only manual selectors get the new tags: auto (urltest) groups must not
-	// silently route traffic through paid, traffic-limited add-on configs.
+	// Like the panel, every group (selector and urltest alike) that lists
+	// the main servers gets the new tags too. Groups that only reference
+	// other groups or direct/block contain no main server and are skipped.
+	mainTags := map[string]bool{}
 	for _, o := range outbounds {
-		if m, ok := o.(map[string]any); ok && m["type"] == "selector" {
-			list, _ := m["outbounds"].([]any)
-			m["outbounds"] = append(list, tags...)
+		if m, ok := o.(map[string]any); ok {
+			if t, _ := m["type"].(string); !singboxNonProxy[t] {
+				tag, _ := m["tag"].(string)
+				mainTags[tag] = true
+			}
+		}
+	}
+	for _, o := range outbounds {
+		m, ok := o.(map[string]any)
+		if !ok || (m["type"] != "selector" && m["type"] != "urltest") {
+			continue
+		}
+		list, _ := m["outbounds"].([]any)
+		for _, t := range list {
+			if tag, _ := t.(string); mainTags[tag] {
+				m["outbounds"] = append(list, tags...)
+				break
+			}
 		}
 	}
 	cfg["outbounds"] = append(outbounds, extra...)
@@ -376,6 +398,43 @@ func yamlRoot(b []byte) (*yaml.Node, error) {
 	return &doc, nil
 }
 
+// yaml.v3 writes every character outside the BMP (i.e. emoji) as a
+// "\UXXXXXXXX" escape. That is valid YAML but unlike the panel's output and
+// unreadable, so put the characters back. The emitter only produces such
+// escapes inside double-quoted scalars, where a literal UTF-8 character is
+// equally valid. A literal "\\U..." elsewhere (single-quoted or plain) would
+// be corrupted, so the result is re-parsed and dropped if it differs.
+var astralEscape = regexp.MustCompile(`(\\+)U([0-9A-Fa-f]{8})`)
+
+func unescapeAstral(b []byte) []byte {
+	out := astralEscape.ReplaceAllFunc(b, func(m []byte) []byte {
+		sub := astralEscape.FindSubmatch(m)
+		slashes := len(sub[1])
+		if slashes%2 == 0 {
+			return m
+		}
+		r, err := strconv.ParseUint(string(sub[2]), 16, 32)
+		if err != nil || !utf8.ValidRune(rune(r)) {
+			return m
+		}
+		return append(bytes.Repeat([]byte{'\\'}, slashes-1), string(rune(r))...)
+	})
+	var before, after any
+	if yaml.Unmarshal(b, &before) != nil || yaml.Unmarshal(out, &after) != nil || !reflect.DeepEqual(before, after) {
+		return b
+	}
+	return out
+}
+
+func listsAny(list *yaml.Node, names map[string]bool) bool {
+	for _, n := range list.Content {
+		if names[n.Value] {
+			return true
+		}
+	}
+	return false
+}
+
 func mergeMihomo(main []byte, add Addition) ([]byte, int, error) {
 	doc, err := yamlRoot(main)
 	if err != nil {
@@ -392,6 +451,7 @@ func mergeMihomo(main []byte, add Addition) ([]byte, int, error) {
 			names[n.Value] = true
 		}
 	}
+	mainNames := maps.Clone(names)
 
 	var extra []*yaml.Node
 	if add.Body != nil {
@@ -427,14 +487,14 @@ func mergeMihomo(main []byte, add Addition) ([]byte, int, error) {
 	}
 	proxies.Content = append(proxies.Content, extra...)
 
-	// As with sing-box, only manual "select" groups receive the new proxies.
+	// Like the panel, every group that lists servers gets the new proxies
+	// too (select and url-test alike). Groups that only reference other
+	// groups or DIRECT/REJECT contain none of the main proxies and are left
+	// alone.
 	if groups := mappingValue(root, "proxy-groups"); groups != nil && groups.Kind == yaml.SequenceNode {
 		for _, g := range groups.Content {
-			if t := mappingValue(g, "type"); t == nil || t.Value != "select" {
-				continue
-			}
 			list := mappingValue(g, "proxies")
-			if list == nil || list.Kind != yaml.SequenceNode {
+			if list == nil || list.Kind != yaml.SequenceNode || !listsAny(list, mainNames) {
 				continue
 			}
 			for _, p := range extra {
@@ -450,5 +510,5 @@ func mergeMihomo(main []byte, add Addition) ([]byte, int, error) {
 		return nil, 0, err
 	}
 	_ = enc.Close()
-	return buf.Bytes(), len(extra), nil
+	return unescapeAstral(buf.Bytes()), len(extra), nil
 }

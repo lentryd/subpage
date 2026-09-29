@@ -178,7 +178,7 @@ func TestMergeXray(t *testing.T) {
 }
 
 func TestMergeSingbox(t *testing.T) {
-	main := `{"outbounds":[{"type":"selector","tag":"proxy","outbounds":["DE","auto"]},{"type":"urltest","tag":"auto","outbounds":["DE"]},{"type":"vless","tag":"DE"},{"type":"direct","tag":"direct"}]}`
+	main := `{"outbounds":[{"type":"selector","tag":"final","outbounds":["proxy","direct"]},{"type":"selector","tag":"proxy","outbounds":["DE","auto"]},{"type":"urltest","tag":"auto","outbounds":["DE"]},{"type":"vless","tag":"DE"},{"type":"direct","tag":"direct"}]}`
 	white := `{"outbounds":[{"type":"selector","tag":"proxy","outbounds":["NL"]},{"type":"vless","tag":"NL","server":"w"},{"type":"direct","tag":"direct"}]}`
 	out, n, err := Merge([]byte(main), Addition{Body: []byte(white), Rename: rename})
 	if err != nil || n != 1 {
@@ -194,19 +194,20 @@ func TestMergeSingbox(t *testing.T) {
 	if err := json.Unmarshal(out, &cfg); err != nil {
 		t.Fatal(err)
 	}
+	cfg.Outbounds = cfg.Outbounds[1:] // "final" only references groups
 	if len(cfg.Outbounds) != 5 || cfg.Outbounds[4].Tag != "W NL" {
 		t.Fatalf("%s", out)
 	}
 	if sel := cfg.Outbounds[0].Outbounds; sel[len(sel)-1] != "W NL" {
 		t.Fatalf("selector not updated: %v", sel)
 	}
-	if len(cfg.Outbounds[1].Outbounds) != 1 {
-		t.Fatalf("urltest must stay untouched: %v", cfg.Outbounds[1].Outbounds)
+	if ut := cfg.Outbounds[1].Outbounds; ut[len(ut)-1] != "W NL" {
+		t.Fatalf("urltest not updated: %v", ut)
 	}
 }
 
 func TestMergeMihomo(t *testing.T) {
-	main := "mixed-port: 7890\nproxies:\n  - name: DE\n    type: vless\n    server: m\n    port: 443\nproxy-groups:\n  - name: Proxy\n    type: select\n    proxies: [DE]\n  - name: Auto\n    type: url-test\n    proxies: [DE]\n"
+	main := "mixed-port: 7890\nproxies:\n  - name: DE\n    type: vless\n    server: m\n    port: 443\nproxy-groups:\n  - name: Proxy\n    type: select\n    proxies: [Auto, DE]\n  - name: Auto\n    type: url-test\n    proxies: [DE]\n  - name: Final\n    type: select\n    proxies: [Proxy, DIRECT]\n"
 	white := "proxies:\n  - name: NL\n    type: vless\n    server: w\n    port: 443\n"
 	for _, add := range []Addition{{Body: []byte(white), Rename: rename}, {StubRemark: "stub"}} {
 		out, n, err := Merge([]byte(main), add)
@@ -229,7 +230,7 @@ func TestMergeMihomo(t *testing.T) {
 		if len(cfg.Proxies) != 2 || cfg.Proxies[1]["name"] != want {
 			t.Fatalf("%s", out)
 		}
-		if g := cfg.Groups[0].Proxies; g[len(g)-1] != want || len(cfg.Groups[1].Proxies) != 1 {
+		if g0, g1 := cfg.Groups[0].Proxies, cfg.Groups[1].Proxies; g0[len(g0)-1] != want || g1[len(g1)-1] != want || len(cfg.Groups[2].Proxies) != 2 {
 			t.Fatalf("groups %+v", cfg.Groups)
 		}
 	}
@@ -309,5 +310,29 @@ func TestExampleConfig(t *testing.T) {
 	}
 	if cfg, err := LoadConfig(t.TempDir()); err != nil || len(cfg.Addons) != 0 {
 		t.Fatalf("directory: %+v %v", cfg, err)
+	}
+}
+
+func TestMihomoKeepsEmoji(t *testing.T) {
+	main := "proxies:\n  - name: 🇩🇪 Германия\n    type: vless\nproxy-groups:\n  - name: 🌍 VPN\n    type: select\n    proxies: [🇩🇪 Германия]\n"
+	out, _, err := Merge([]byte(main), Addition{StubRemark: "🏳️ LTE"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(out), `\U`) || !strings.Contains(string(out), "🌍 VPN") || !strings.Contains(string(out), "🏳️ LTE") {
+		t.Fatalf("%s", out)
+	}
+
+	// A literal backslash-U in a non-double-quoted scalar must survive.
+	literal := "proxies:\n  - name: 🇩🇪 DE\n    path: 'a\\U0001F30D'\n"
+	out, _, err = Merge([]byte(literal), Addition{StubRemark: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg struct {
+		Proxies []map[string]string `yaml:"proxies"`
+	}
+	if err := yaml.Unmarshal(out, &cfg); err != nil || cfg.Proxies[0]["path"] != `a\U0001F30D` || cfg.Proxies[0]["name"] != "🇩🇪 DE" {
+		t.Fatalf("%+v %v\n%s", cfg, err, out)
 	}
 }
