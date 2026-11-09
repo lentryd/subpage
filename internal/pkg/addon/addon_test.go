@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -305,8 +306,11 @@ func TestExampleConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(cfg.Addons) != 1 || cfg.Addons[0].username("alice") != "premium_alice" || cfg.Addons[0].Stubs["LIMITED"] == "" {
+	if len(cfg.Addons) != 2 || cfg.Addons[0].username("alice") != "premium_alice" || cfg.Addons[0].Stubs["LIMITED"] == "" {
 		t.Fatalf("%+v", cfg)
+	}
+	if l := cfg.Addons[1]; len(l.Links) != 2 || l.Usage == nil || l.Usage.Headers["x-hwid"] == "" || l.Usage.Cache != 5*time.Minute {
+		t.Fatalf("%+v", l)
 	}
 	if cfg, err := LoadConfig(t.TempDir()); err != nil || len(cfg.Addons) != 0 {
 		t.Fatalf("directory: %+v %v", cfg, err)
@@ -334,5 +338,146 @@ func TestMihomoKeepsEmoji(t *testing.T) {
 	}
 	if err := yaml.Unmarshal(out, &cfg); err != nil || cfg.Proxies[0]["path"] != `a\U0001F30D` || cfg.Proxies[0]["name"] != "🇩🇪 DE" {
 		t.Fatalf("%+v %v\n%s", cfg, err, out)
+	}
+}
+
+func writeCfg(t *testing.T, data string) (Config, error) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "addons.yml")
+	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return LoadConfig(path)
+}
+
+func TestLoadConfigLinks(t *testing.T) {
+	cfg, err := writeCfg(t, `addons:
+  - prefix: white_
+    links:
+      - remark: "A {remaining}"
+        link: vless://id@h:443#x
+      - remark: "B"
+        link: hysteria2://pw@h:443
+    usage:
+      url: https://p/sub
+      headers:
+        x-hwid: abc
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := cfg.Addons[0]
+	if len(a.Links) != 2 || a.Links[1].Remark != "B" || a.Links[0].Link != "vless://id@h:443#x" {
+		t.Fatalf("%+v", a.Links)
+	}
+	if a.Usage == nil || a.Usage.URL != "https://p/sub" || a.Usage.Headers["x-hwid"] != "abc" || a.Usage.Cache != 5*time.Minute {
+		t.Fatalf("%+v", a.Usage)
+	}
+}
+
+func TestLoadConfigLinksInvalid(t *testing.T) {
+	for name, body := range map[string]string{
+		"scheme":    "    links:\n      - link: http://x\n",
+		"empty":     "    links:\n      - remark: r\n",
+		"usage url": "    usage:\n      headers: {a: b}\n",
+	} {
+		_, err := writeCfg(t, "addons:\n  - prefix: p_\n"+body)
+		if err == nil || !strings.Contains(err.Error(), "addons[0]") {
+			t.Errorf("%s: err = %v", name, err)
+		}
+	}
+}
+
+func TestStaticRemark(t *testing.T) {
+	const tmpl = "{remark}|{remaining}|{limit}|{used}"
+	for name, tc := range map[string]struct {
+		info  UsageInfo
+		known bool
+		want  string
+	}{
+		"limited":   {UsageInfo{Used: 3 * gib, Total: 10 * gib}, true, "orig|7|10|3"},
+		"overspent": {UsageInfo{Used: 12 * gib, Total: 10 * gib}, true, "orig|0|10|12"},
+		"unlimited": {UsageInfo{Used: 3 * gib}, true, "orig|∞|∞|3"},
+		"unknown":   {UsageInfo{}, false, "orig|?|?|?"},
+	} {
+		if got := staticRemark(tmpl, "orig", tc.info, tc.known); got != tc.want {
+			t.Errorf("%s: %q want %q", name, got, tc.want)
+		}
+	}
+}
+
+func staticService(t *testing.T, panel *httptest.Server, usageURL string) *Service {
+	t.Helper()
+	cfg := Config{Timeout: 2 * time.Second, Addons: []Addon{{
+		Name: "white", Prefix: "white_",
+		Remark: "R {remark} {remaining}/{limit}", RemarkUnlimited: "R {remark} unlimited",
+		Stubs: map[string]string{"LIMITED": "limit reached"},
+		Links: []LinkItem{
+			{Remark: "A {remaining}/{limit} {remark}", Link: staticVless},
+			{Link: staticHy2},
+		},
+		Usage: &Usage{URL: usageURL, Headers: map[string]string{"X-Hwid": "dev-1"}, Cache: time.Minute},
+	}}}
+	return NewService(subpage.NewPanelClient(panel.URL, "tok"), cfg)
+}
+
+func resolveStatic(t *testing.T, s *Service) Result {
+	t.Helper()
+	_, results, err := s.Resolve(context.Background(), "main", "", "1.2.3.4", nil)
+	if err != nil || len(results) != 1 {
+		t.Fatal(results, err)
+	}
+	return results[0]
+}
+
+func TestResolveStaticLinks(t *testing.T) {
+	panel := fakePanel(t, StatusActive, 0, 0, 0)
+	defer panel.Close()
+	var hits, status atomic.Int32
+	usage, seen := usageServer(t, &hits, &status)
+	res := resolveStatic(t, staticService(t, panel, usage.URL))
+	if res.Err != nil || res.Addition == nil || res.Addition.Body != nil || len(res.Addition.Configs) != 2 {
+		t.Fatalf("%+v", res)
+	}
+	c := res.Addition.Configs
+	if c[0].Name != "A 7/10 orig" || c[0].Link != staticVless || c[1].Name != "R orig2 7/10" {
+		t.Fatalf("%+v", c)
+	}
+	if seen.Get("X-Hwid") != "dev-1" {
+		t.Fatalf("headers: %v", *seen)
+	}
+}
+
+func TestResolveStaticLinksNotActive(t *testing.T) {
+	panel := fakePanel(t, "LIMITED", 0, 0, 0)
+	defer panel.Close()
+	var hits, status atomic.Int32
+	usage, _ := usageServer(t, &hits, &status)
+	res := resolveStatic(t, staticService(t, panel, usage.URL))
+	if res.Addition == nil || res.Addition.StubRemark != "limit reached" || len(res.Addition.Configs) != 0 {
+		t.Fatalf("%+v", res.Addition)
+	}
+}
+
+func TestResolveStaticLinksUsageDown(t *testing.T) {
+	panel := fakePanel(t, StatusActive, 0, 0, 0)
+	defer panel.Close()
+	var hits, status atomic.Int32
+	status.Store(500)
+	usage, _ := usageServer(t, &hits, &status)
+	res := resolveStatic(t, staticService(t, panel, usage.URL))
+	if res.Err != nil || res.Addition == nil || len(res.Addition.Configs) != 2 || res.Addition.Configs[0].Name != "A ?/? orig" {
+		t.Fatalf("%+v", res)
+	}
+}
+
+func TestResolveStaticLinksPanelNumbers(t *testing.T) {
+	panel := fakePanel(t, StatusActive, 0, 10*gib, 4*gib)
+	defer panel.Close()
+	s := staticService(t, panel, "")
+	s.cfg.Addons[0].Usage = nil
+	res := resolveStatic(t, s)
+	if res.Addition == nil || res.Addition.Configs[0].Name != "A 6/10 orig" {
+		t.Fatalf("%+v", res.Addition)
 	}
 }

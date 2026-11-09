@@ -31,3 +31,33 @@ addons:
       LIMITED: "⭐ Premium: traffic limit reached, top up to continue"
       EXPIRED: "⭐ Premium: subscription expired, renew to continue"
       # DISABLED: ""
+
+  # Ready-made configs instead of the add-on user's panel subscription.
+  # `extra_<username>` must still exist in the panel and be ACTIVE (otherwise
+  # `stubs` apply as above); the configs are added to every subscription
+  # format. Supported links: vless://, hysteria2:// (hy2://). hysteria2 is
+  # skipped in xray-json output.
+  - name: extra
+    prefix: extra_
+    links:
+      # `remark` is this config's name; same placeholders as above, plus
+      # {remark} = the #name in the link. Empty falls back to the add-on's
+      # `remark`. Unlimited traffic shows ∞, unknown usage shows ?.
+      - remark: "Extra · {remaining} of {limit} GB left"
+        link: "vless://11111111-1111-1111-1111-111111111111@example.com:443?type=tcp&security=reality&sni=example.com&fp=chrome&pbk=PUBLIC_KEY&sid=ab12&flow=xtls-rprx-vision#Extra"
+      - remark: "Extra hy2 · {remaining} of {limit} GB left"
+        link: "hysteria2://password@example.com:443?sni=example.com&obfs=salamander&obfs-password=secret#Extra-hy2"
+    # Where traffic numbers come from: the Subscription-Userinfo header of
+    # this URL. Headers are sent only with this request (use them to pass
+    # the HWID check). Without `usage`, the panel add-on user's numbers are used.
+    usage:
+      url: https://provider.example/sub/TOKEN
+      headers:
+        x-hwid: "YOUR-DEVICE-HWID"
+        x-device-os: "iOS"
+        x-device-model: "iPhone15,2"
+        user-agent: "Happ/1.0"
+      cache: 5m
+    stubs:
+      LIMITED: "Extra: traffic limit reached"
+      EXPIRED: "Extra: subscription expired"

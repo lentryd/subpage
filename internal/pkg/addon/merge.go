@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"net/url"
 	"reflect"
@@ -50,6 +51,8 @@ type Addition struct {
 	Body       []byte
 	Rename     func(remark string) string
 	StubRemark string
+	// Configs are ready-made share links (static add-on). Used when Body is nil.
+	Configs []StaticConfig
 }
 
 // Merge appends add to main and returns the merged payload plus the number
@@ -59,7 +62,7 @@ func Merge(main []byte, add Addition) ([]byte, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	if add.Body == nil && add.StubRemark == "" {
+	if add.Body == nil && add.StubRemark == "" && len(add.Configs) == 0 {
 		return main, 0, nil
 	}
 	switch format {
@@ -175,6 +178,11 @@ func mergeLinks(format Format, main []byte, add Addition) ([]byte, int, error) {
 		for _, l := range addLinks {
 			extra = append(extra, renameLink(l, add.Rename))
 		}
+	} else if len(add.Configs) > 0 {
+		for _, c := range add.Configs {
+			name := c.Name
+			extra = append(extra, renameLink(c.Link, func(string) string { return name }))
+		}
 	} else {
 		extra = append(extra, fmt.Sprintf("vless://%s@%s:%d?type=tcp&security=none#%s",
 			stubUUID, stubHost, stubPort, url.PathEscape(add.StubRemark)))
@@ -266,6 +274,16 @@ func mergeXray(main []byte, add Addition) ([]byte, int, error) {
 			c["remarks"] = names.name(add.Rename(r))
 			extra = append(extra, c)
 		}
+	} else if len(add.Configs) > 0 {
+		for _, p := range add.proxies() {
+			c, ok := p.Xray()
+			if !ok {
+				slog.Warn("add-on link skipped: protocol not supported in xray-json", "scheme", p.Scheme)
+				continue
+			}
+			c["remarks"] = names.name(p.Name)
+			extra = append(extra, c)
+		}
 	} else {
 		extra = append(extra, map[string]any{
 			"remarks": names.name(add.StubRemark),
@@ -324,6 +342,12 @@ func mergeSingbox(main []byte, add Addition) ([]byte, int, error) {
 			m["tag"] = names.name(add.Rename(tag))
 			extra = append(extra, m)
 			tags = append(tags, m["tag"])
+		}
+	} else if len(add.Configs) > 0 {
+		for _, p := range add.proxies() {
+			p.Name = names.name(p.Name)
+			extra = append(extra, p.Singbox())
+			tags = append(tags, p.Name)
 		}
 	} else {
 		tag := names.name(add.StubRemark)
@@ -471,6 +495,11 @@ func mergeMihomo(main []byte, add Addition) ([]byte, int, error) {
 				setMappingValue(p, "name", names.name(add.Rename(orig)))
 				extra = append(extra, p)
 			}
+		}
+	} else if len(add.Configs) > 0 {
+		for _, p := range add.proxies() {
+			p.Name = names.name(p.Name)
+			extra = append(extra, p.Mihomo())
 		}
 	} else {
 		var stub yaml.Node

@@ -35,7 +35,27 @@ const (
 
 const StatusActive = "ACTIVE"
 
-const defaultTimeout = 2 * time.Second
+const (
+	defaultTimeout    = 2 * time.Second
+	defaultUsageCache = 5 * time.Minute
+)
+
+// LinkItem is a ready-made config appended instead of the add-on user's
+// panel subscription. Remark is a name template (same placeholders as
+// Addon.Remark); empty falls back to the add-on's remark.
+type LinkItem struct {
+	Remark string `yaml:"remark"`
+	Link   string `yaml:"link"`
+}
+
+// Usage says where {remaining}/{limit}/{used} come from for static links: the
+// Subscription-Userinfo header of URL, requested with Headers (HWID, device
+// data). Responses are cached for Cache.
+type Usage struct {
+	URL     string            `yaml:"url"`
+	Headers map[string]string `yaml:"headers"`
+	Cache   time.Duration     `yaml:"cache"`
+}
 
 // Addon is one entry of the add-ons file.
 type Addon struct {
@@ -52,6 +72,10 @@ type Addon struct {
 	// the name of a single unusable placeholder config. A status that is
 	// missing or empty adds nothing.
 	Stubs map[string]string `yaml:"stubs"`
+	// Links, when set, replace the add-on user's panel subscription.
+	Links []LinkItem `yaml:"links"`
+	// Usage is the external source of traffic numbers for Links.
+	Usage *Usage `yaml:"usage"`
 }
 
 func (a Addon) username(main string) string { return a.Prefix + main + a.Suffix }
@@ -104,6 +128,19 @@ func LoadConfig(path string) (Config, error) {
 			stubs[strings.ToUpper(status)] = text
 		}
 		a.Stubs = stubs
+		for j, l := range a.Links {
+			if _, err := ParseLink(l.Link); err != nil {
+				return cfg, fmt.Errorf("addons[%d].links[%d]: %w", i, j, err)
+			}
+		}
+		if a.Usage != nil {
+			if a.Usage.URL == "" {
+				return cfg, fmt.Errorf("addons[%d].usage: url is required", i)
+			}
+			if a.Usage.Cache <= 0 {
+				a.Usage.Cache = defaultUsageCache
+			}
+		}
 	}
 	return cfg, nil
 }
@@ -111,10 +148,11 @@ func LoadConfig(path string) (Config, error) {
 type Service struct {
 	panel *subpage.PanelClient
 	cfg   Config
+	usage *usageCache
 }
 
 func NewService(panel *subpage.PanelClient, cfg Config) *Service {
-	return &Service{panel: panel, cfg: cfg}
+	return &Service{panel: panel, cfg: cfg, usage: newUsageCache()}
 }
 
 func (s *Service) Enabled() bool { return s != nil && len(s.cfg.Addons) > 0 }
@@ -219,6 +257,11 @@ func (s *Service) resolveOne(ctx context.Context, a Addon, mainUsername, clientT
 		return res
 	}
 
+	if len(a.Links) > 0 {
+		res.Addition = &Addition{Configs: s.staticConfigs(ctx, a, user)}
+		return res
+	}
+
 	path := fmt.Sprintf(pathSubscription, url.PathEscape(user.ShortUUID))
 	if clientType != "" {
 		path += "/" + clientType
@@ -234,6 +277,46 @@ func (s *Service) resolveOne(ctx context.Context, a Addon, mainUsername, clientT
 	}
 	res.Addition = &Addition{Body: resp.Body, Rename: renamer(a, user)}
 	return res
+}
+
+// staticConfigs names each of the add-on's ready-made links. Traffic numbers
+// come from the external usage URL when configured, else from the panel
+// add-on user.
+func (s *Service) staticConfigs(ctx context.Context, a Addon, user *panelUser) []StaticConfig {
+	info, known := UsageInfo{Used: user.used(), Total: user.TrafficLimitBytes}, true
+	if a.Usage != nil {
+		info, known = s.usage.get(ctx, a.Name+"|"+a.Usage.URL, *a.Usage)
+	}
+	out := make([]StaticConfig, 0, len(a.Links))
+	for _, l := range a.Links {
+		original := ""
+		if p, err := ParseLink(l.Link); err == nil {
+			original = p.Name
+		}
+		tmpl := l.Remark
+		if tmpl == "" {
+			tmpl = a.Remark
+			if known && info.Total == 0 {
+				tmpl = a.RemarkUnlimited
+			}
+		}
+		out = append(out, StaticConfig{Link: l.Link, Name: staticRemark(tmpl, original, info, known)})
+	}
+	return out
+}
+
+// staticRemark fills a link's remark template. Unlimited traffic shows
+// "∞" for {remaining} and {limit}; unknown usage shows "?" for all numbers.
+func staticRemark(tmpl, original string, info UsageInfo, known bool) string {
+	remaining, limit, used := "?", "?", "?"
+	switch {
+	case !known:
+	case info.Total == 0:
+		remaining, limit, used = "∞", "∞", FormatGB(info.Used)
+	default:
+		remaining, limit, used = FormatGB(math.Max(0, info.Total-info.Used)), FormatGB(info.Total), FormatGB(info.Used)
+	}
+	return strings.NewReplacer("{remark}", original, "{remaining}", remaining, "{limit}", limit, "{used}", used).Replace(tmpl)
 }
 
 func renamer(a Addon, u *panelUser) func(string) string {
