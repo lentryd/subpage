@@ -5,6 +5,7 @@ go 1.26.4
 require (
 	github.com/gofiber/fiber/v2 v2.52.14
 	github.com/golang-jwt/jwt/v5 v5.3.1
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -19,5 +20,4 @@ require (
 	github.com/valyala/fasthttp v1.51.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect
 	golang.org/x/sys v0.28.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
