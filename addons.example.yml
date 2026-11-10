@@ -55,11 +55,11 @@ addons:
       # {remark} = the name found in the subscription. The subscription may be
       # base64/plain links, xray-json, sing-box or mihomo, whichever the
       # provider returns for the `user-agent` below; only vless and hysteria2
-      # configs are read. In xray-json a config is named "<entry remarks> ·
-      # Hysteria 2 · Salamander · <outbound tag>" (the middle parts only for
-      # hysteria2, like in base64/mihomo subscriptions); configs chained
-      # through another outbound (dialerProxy) are skipped. If the
-      # subscription is unreachable or nothing matches, the item is skipped.
+      # configs are read. Names are exactly what that client shows, so check
+      # them in the client first (in xray-json a name is the entry's remarks,
+      # shared by all its servers). Configs chained through another outbound
+      # (dialerProxy) are skipped. If the subscription is unreachable or
+      # nothing matches, the item is skipped.
       - remark: "{remark} · {remaining} of {limit} GB left"
         match: "Germany.*Salamander"
         # all: true

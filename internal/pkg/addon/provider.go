@@ -166,8 +166,7 @@ func fromXray(body []byte) []providerLink {
 		}
 		for _, ob := range outbounds {
 			o := asObj(ob)
-			tag := str(o, "tag")
-			if dialerProxy(o) != "" || hops[tag] {
+			if dialerProxy(o) != "" || hops[str(o, "tag")] {
 				continue
 			}
 			var p Proxy
@@ -181,21 +180,8 @@ func fromXray(body []byte) []providerLink {
 			if !ok {
 				continue
 			}
-			// Name it like base64/mihomo subscriptions do, so one `match`
-			// works for any format: "<remarks> · Hysteria 2 · Salamander ·
-			// <tag>". Per-server entries are only distinguishable by tag; a
-			// lone "proxy" outbound is just the entry itself.
-			parts := []string{remarks}
-			if p.Scheme == "hysteria2" {
-				parts = append(parts, "Hysteria 2")
-				if p.Params.Get("obfs") == "salamander" {
-					parts = append(parts, "Salamander")
-				}
-			}
-			if tag != "" && tag != "proxy" {
-				parts = append(parts, tag)
-			}
-			p.Name = strings.Join(parts, " · ")
+			// Named as the client shows it: by the entry's remarks.
+			p.Name = remarks
 			out = emit(out, p)
 		}
 	}

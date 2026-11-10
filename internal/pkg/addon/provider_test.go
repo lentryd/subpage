@@ -137,5 +137,5 @@ func TestParseProviderXrayHysteriaAndChains(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("want only the standalone hysteria config, got %+v", got)
 	}
-	wantLink(t, got, "SE · Hysteria 2 · Salamander · SE-5-b87bc4", pHy2)
+	wantLink(t, got, "SE", pHy2)
 }
