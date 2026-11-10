@@ -47,8 +47,24 @@ addons:
         link: "vless://11111111-1111-1111-1111-111111111111@example.com:443?type=tcp&security=reality&sni=example.com&fp=chrome&pbk=PUBLIC_KEY&sid=ab12&flow=xtls-rprx-vision#Extra"
       - remark: "Extra hy2 · {remaining} of {limit} GB left"
         link: "hysteria2://password@example.com:443?sni=example.com&obfs=salamander&obfs-password=secret#Extra-hy2"
+      # Instead of `link`, `match` takes the config from the subscription at
+      # `usage.url` (requires `usage`). `match` is a regular expression (Go
+      # RE2) tested against config names: unanchored, case-sensitive, so
+      # "Germany.*Salamander" works and "^Germany$" is an exact name. Only the
+      # first matching config is used; set `all: true` to add every match.
+      # {remark} = the name found in the subscription. The subscription may be
+      # base64/plain links, xray-json, sing-box or mihomo, whichever the
+      # provider returns for the `user-agent` below; only vless and hysteria2
+      # configs are read. In xray-json a config is named "<entry remarks> ·
+      # Hysteria 2 · Salamander · <outbound tag>" (the middle parts only for
+      # hysteria2, like in base64/mihomo subscriptions); configs chained
+      # through another outbound (dialerProxy) are skipped. If the
+      # subscription is unreachable or nothing matches, the item is skipped.
+      - remark: "{remark} · {remaining} of {limit} GB left"
+        match: "Germany.*Salamander"
+        # all: true
     # Where traffic numbers come from: the Subscription-Userinfo header of
-    # this URL. Headers are sent only with this request (use them to pass
+    # this URL (and the configs for `match` from its body). Headers are sent only with this request (use them to pass
     # the HWID check). Without `usage`, the panel add-on user's numbers are used.
     usage:
       url: https://provider.example/sub/TOKEN

@@ -309,7 +309,7 @@ func TestExampleConfig(t *testing.T) {
 	if len(cfg.Addons) != 2 || cfg.Addons[0].username("alice") != "premium_alice" || cfg.Addons[0].Stubs["LIMITED"] == "" {
 		t.Fatalf("%+v", cfg)
 	}
-	if l := cfg.Addons[1]; len(l.Links) != 2 || l.Usage == nil || l.Usage.Headers["x-hwid"] == "" || l.Usage.Cache != 5*time.Minute {
+	if l := cfg.Addons[1]; len(l.Links) != 3 || l.Links[2].Match != "Germany.*Salamander" || l.Usage == nil || l.Usage.Headers["x-hwid"] == "" || l.Usage.Cache != 5*time.Minute {
 		t.Fatalf("%+v", l)
 	}
 	if cfg, err := LoadConfig(t.TempDir()); err != nil || len(cfg.Addons) != 0 {
@@ -380,6 +380,9 @@ func TestLoadConfigLinksInvalid(t *testing.T) {
 		"scheme":    "    links:\n      - link: http://x\n",
 		"empty":     "    links:\n      - remark: r\n",
 		"usage url": "    usage:\n      headers: {a: b}\n",
+		"both":      "    links:\n      - link: vless://id@h:443#x\n        match: x\n    usage:\n      url: https://p\n",
+		"no usage":  "    links:\n      - match: x\n",
+		"bad regex": "    links:\n      - match: '('\n    usage:\n      url: https://p\n",
 	} {
 		_, err := writeCfg(t, "addons:\n  - prefix: p_\n"+body)
 		if err == nil || !strings.Contains(err.Error(), "addons[0]") {
@@ -479,5 +482,94 @@ func TestResolveStaticLinksPanelNumbers(t *testing.T) {
 	res := resolveStatic(t, s)
 	if res.Addition == nil || res.Addition.Configs[0].Name != "A 6/10 orig" {
 		t.Fatalf("%+v", res.Addition)
+	}
+}
+
+func TestLoadConfigMatch(t *testing.T) {
+	cfg, err := writeCfg(t, `addons:
+  - prefix: p_
+    links:
+      - remark: "{remark}"
+        match: Germany
+    usage:
+      url: https://p/sub
+`)
+	if err != nil || cfg.Addons[0].Links[0].Match != "Germany" {
+		t.Fatalf("%+v %v", cfg.Addons, err)
+	}
+}
+
+// matchServer serves a base64 subscription of the given lines plus numbers.
+func matchServer(t *testing.T, lines ...string) *httptest.Server {
+	t.Helper()
+	body := base64.StdEncoding.EncodeToString([]byte(strings.Join(lines, "\n")))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Subscription-Userinfo", "upload=1073741824; download=2147483648; total=10737418240")
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestResolveStaticMatch(t *testing.T) {
+	panel := fakePanel(t, StatusActive, 0, 0, 0)
+	defer panel.Close()
+	usage := matchServer(t,
+		"vless://11111111-1111-1111-1111-111111111111@de.example.com:443?type=tcp&security=tls#Germany",
+		"vmess://ignored",
+		"hysteria2://pw@fi.example.com:443#Finland",
+	)
+	s := staticService(t, panel, usage.URL)
+	s.cfg.Addons[0].Links = []LinkItem{
+		{Remark: "{remark} {remaining}/{limit}", Match: "Germany"},
+		{Match: "Finland"},
+		{Match: "germany"}, // exact match is case-sensitive
+		{Match: "Nowhere"},
+	}
+	res := resolveStatic(t, s)
+	if res.Err != nil || res.Addition == nil || len(res.Addition.Configs) != 2 {
+		t.Fatalf("%+v", res)
+	}
+	c := res.Addition.Configs
+	if c[0].Name != "Germany 7/10" || !strings.HasPrefix(c[0].Link, "vless://") || c[1].Name != "R Finland 7/10" {
+		t.Fatalf("%+v", c)
+	}
+}
+
+func TestResolveStaticMatchUsageDown(t *testing.T) {
+	panel := fakePanel(t, StatusActive, 0, 0, 0)
+	defer panel.Close()
+	var hits, status atomic.Int32
+	status.Store(500)
+	usage, _ := usageServer(t, &hits, &status)
+	s := staticService(t, panel, usage.URL)
+	s.cfg.Addons[0].Links = []LinkItem{{Match: "Germany"}}
+	res := resolveStatic(t, s)
+	if res.Err != nil || res.Addition == nil || len(res.Addition.Configs) != 0 {
+		t.Fatalf("%+v", res)
+	}
+}
+
+func TestResolveStaticMatchRegexAndAll(t *testing.T) {
+	panel := fakePanel(t, StatusActive, 0, 0, 0)
+	defer panel.Close()
+	usage := matchServer(t,
+		"hysteria2://pw1@a.example.com:443#Sweden · Salamander · aaa",
+		"hysteria2://pw2@b.example.com:443#Sweden · Hysteria 2 · bbb",
+		"hysteria2://pw3@c.example.com:443#Sweden · Salamander · ccc",
+	)
+	s := staticService(t, panel, usage.URL)
+	s.cfg.Addons[0].Links = []LinkItem{
+		{Remark: "first {remark}", Match: "Sweden.*Salamander"},
+		{Remark: "all {remark}", Match: "Sweden.*Salamander", All: true},
+	}
+	res := resolveStatic(t, s)
+	var names []string
+	for _, c := range res.Addition.Configs {
+		names = append(names, c.Name)
+	}
+	want := "first Sweden · Salamander · aaa|all Sweden · Salamander · aaa|all Sweden · Salamander · ccc"
+	if got := strings.Join(names, "|"); got != want {
+		t.Fatalf("%q want %q", got, want)
 	}
 }

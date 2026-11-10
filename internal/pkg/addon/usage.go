@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -46,9 +48,21 @@ func parseUserinfo(h string) (UsageInfo, error) {
 	return info, nil
 }
 
+// maxUsageBody caps how much of the usage subscription is read for `match`.
+const maxUsageBody = 4 << 20
+
+// usageData is one fetch of the usage URL: traffic numbers from the
+// Subscription-Userinfo header (hasInfo false when absent) and, when asked
+// for, the configs of the response body.
+type usageData struct {
+	info    UsageInfo
+	hasInfo bool
+	links   []providerLink
+}
+
 type usageEntry struct {
 	mu   sync.Mutex
-	info UsageInfo
+	data usageData
 	at   time.Time
 	ok   bool
 	// failedAt is the last failed fetch; retries wait retryAfter so a dead
@@ -69,10 +83,17 @@ func newUsageCache() *usageCache {
 	return &usageCache{entries: map[string]*usageEntry{}, http: &http.Client{Timeout: 10 * time.Second}}
 }
 
-// get returns the cached usage when fresh, otherwise refetches it. If the
-// refetch fails the last good value is returned; ok is false only when no
-// fetch has ever succeeded for key.
+// get returns the cached usage numbers when fresh, otherwise refetches them.
+// If the refetch fails the last good value is returned; ok is false when no
+// fetch has ever succeeded for key or the response carried no numbers.
 func (c *usageCache) get(ctx context.Context, key string, u Usage) (UsageInfo, bool) {
+	d, ok := c.load(ctx, key, u, false)
+	return d.info, ok && d.hasInfo
+}
+
+// load is get plus, when withLinks is set, the configs found in the body of
+// the response (and then a missing Subscription-Userinfo header is no error).
+func (c *usageCache) load(ctx context.Context, key string, u Usage, withLinks bool) (usageData, bool) {
 	c.mu.Lock()
 	e := c.entries[key]
 	if e == nil {
@@ -84,38 +105,54 @@ func (c *usageCache) get(ctx context.Context, key string, u Usage) (UsageInfo, b
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.ok && time.Since(e.at) < u.Cache {
-		return e.info, true
+		return e.data, true
 	}
 	if !e.failedAt.IsZero() && time.Since(e.failedAt) < min(retryAfter, u.Cache) {
-		return e.info, e.ok
+		return e.data, e.ok
 	}
-	if info, err := c.fetch(ctx, u); err == nil {
-		e.info, e.at, e.ok, e.failedAt = info, time.Now(), true, time.Time{}
+	if d, err := c.fetch(ctx, u, withLinks); err == nil {
+		e.data, e.at, e.ok, e.failedAt = d, time.Now(), true, time.Time{}
 	} else {
+		slog.Warn("add-on usage fetch failed", "url", u.URL, "err", err)
 		e.failedAt = time.Now()
 	}
-	return e.info, e.ok
+	return e.data, e.ok
 }
 
-func (c *usageCache) fetch(ctx context.Context, u Usage) (UsageInfo, error) {
+func (c *usageCache) fetch(ctx context.Context, u Usage, withLinks bool) (usageData, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.URL, nil)
 	if err != nil {
-		return UsageInfo{}, err
+		return usageData{}, err
 	}
 	for k, v := range u.Headers {
 		req.Header.Set(k, v)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return UsageInfo{}, err
+		return usageData{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return UsageInfo{}, fmt.Errorf("usage status %d", resp.StatusCode)
+		return usageData{}, fmt.Errorf("usage status %d", resp.StatusCode)
 	}
-	h := resp.Header.Get("Subscription-Userinfo")
-	if h == "" {
-		return UsageInfo{}, errors.New("no Subscription-Userinfo header")
+	var d usageData
+	if h := resp.Header.Get("Subscription-Userinfo"); h != "" {
+		if d.info, err = parseUserinfo(h); err != nil {
+			if !withLinks {
+				return usageData{}, err
+			}
+		} else {
+			d.hasInfo = true
+		}
+	} else if !withLinks {
+		return usageData{}, errors.New("no Subscription-Userinfo header")
 	}
-	return parseUserinfo(h)
+	if withLinks {
+		body, err := io.ReadAll(io.LimitReader(resp.Body, maxUsageBody))
+		if err != nil {
+			return usageData{}, err
+		}
+		d.links = parseProviderLinks(body)
+	}
+	return d, nil
 }

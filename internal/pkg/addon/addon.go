@@ -12,10 +12,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -43,9 +46,17 @@ const (
 // LinkItem is a ready-made config appended instead of the add-on user's
 // panel subscription. Remark is a name template (same placeholders as
 // Addon.Remark); empty falls back to the add-on's remark.
+//
+// Either Link or Match is set. Match is a regular expression (RE2, unanchored,
+// case-sensitive) tested against the config names of the subscription at
+// Usage.URL; the first config that matches is used, or every one with All.
 type LinkItem struct {
 	Remark string `yaml:"remark"`
 	Link   string `yaml:"link"`
+	Match  string `yaml:"match"`
+	All    bool   `yaml:"all"`
+
+	matchRe *regexp.Regexp
 }
 
 // Usage says where {remaining}/{limit}/{used} come from for static links: the
@@ -129,8 +140,22 @@ func LoadConfig(path string) (Config, error) {
 		}
 		a.Stubs = stubs
 		for j, l := range a.Links {
-			if _, err := ParseLink(l.Link); err != nil {
-				return cfg, fmt.Errorf("addons[%d].links[%d]: %w", i, j, err)
+			switch {
+			case l.Link != "" && l.Match != "":
+				return cfg, fmt.Errorf("addons[%d].links[%d]: set either link or match, not both", i, j)
+			case l.Match != "":
+				if a.Usage == nil {
+					return cfg, fmt.Errorf("addons[%d].links[%d]: match requires usage", i, j)
+				}
+				re, err := regexp.Compile(l.Match)
+				if err != nil {
+					return cfg, fmt.Errorf("addons[%d].links[%d]: match: %w", i, j, err)
+				}
+				a.Links[j].matchRe = re
+			default:
+				if _, err := ParseLink(l.Link); err != nil {
+					return cfg, fmt.Errorf("addons[%d].links[%d]: %w", i, j, err)
+				}
 			}
 		}
 		if a.Usage != nil {
@@ -281,16 +306,21 @@ func (s *Service) resolveOne(ctx context.Context, a Addon, mainUsername, clientT
 
 // staticConfigs names each of the add-on's ready-made links. Traffic numbers
 // come from the external usage URL when configured, else from the panel
-// add-on user.
+// add-on user. Items with `match` take their link from the usage subscription
+// and are skipped when it is unavailable or has no config of that name.
 func (s *Service) staticConfigs(ctx context.Context, a Addon, user *panelUser) []StaticConfig {
 	info, known := UsageInfo{Used: user.used(), Total: user.TrafficLimitBytes}, true
+	var provider []providerLink
 	if a.Usage != nil {
-		info, known = s.usage.get(ctx, a.Name+"|"+a.Usage.URL, *a.Usage)
+		var d usageData
+		var ok bool
+		d, ok = s.usage.load(ctx, a.Name+"|"+a.Usage.URL, *a.Usage, a.hasMatch())
+		info, known, provider = d.info, ok && d.hasInfo, d.links
 	}
 	out := make([]StaticConfig, 0, len(a.Links))
-	for _, l := range a.Links {
+	add := func(l LinkItem, link string) {
 		original := ""
-		if p, err := ParseLink(l.Link); err == nil {
+		if p, err := ParseLink(link); err == nil {
 			original = p.Name
 		}
 		tmpl := l.Remark
@@ -300,9 +330,45 @@ func (s *Service) staticConfigs(ctx context.Context, a Addon, user *panelUser) [
 				tmpl = a.RemarkUnlimited
 			}
 		}
-		out = append(out, StaticConfig{Link: l.Link, Name: staticRemark(tmpl, original, info, known)})
+		out = append(out, StaticConfig{Link: link, Name: staticRemark(tmpl, original, info, known)})
+	}
+	for _, l := range a.Links {
+		if l.Match == "" {
+			add(l, l.Link)
+			continue
+		}
+		found := false
+		for _, p := range provider {
+			if !l.matches(p.Name) {
+				continue
+			}
+			found = true
+			add(l, p.Link)
+			if !l.All {
+				break
+			}
+		}
+		if !found {
+			slog.Warn("add-on match not found", "addon", a.Name, "match", l.Match)
+		}
 	}
 	return out
+}
+
+// matches reports whether name satisfies Match; LoadConfig precompiles it.
+func (l LinkItem) matches(name string) bool {
+	re := l.matchRe
+	if re == nil {
+		var err error
+		if re, err = regexp.Compile(l.Match); err != nil {
+			return false
+		}
+	}
+	return re.MatchString(name)
+}
+
+func (a Addon) hasMatch() bool {
+	return slices.ContainsFunc(a.Links, func(l LinkItem) bool { return l.Match != "" })
 }
 
 // staticRemark fills a link's remark template. Unlimited traffic shows
