@@ -49,23 +49,63 @@ addons:
         link: "hysteria2://password@example.com:443?sni=example.com&obfs=salamander&obfs-password=secret#Extra-hy2"
       # Instead of `link`, `match` takes the config from the subscription at
       # `usage.url` (requires `usage`). `match` is a regular expression (Go
-      # RE2) tested against config names: unanchored, case-sensitive, so
-      # "Germany.*Salamander" works and "^Germany$" is an exact name. Only the
-      # first matching config is used; set `all: true` to add every match.
-      # {remark} = the name found in the subscription. The subscription may be
-      # base64/plain links, xray-json, sing-box or mihomo, whichever the
-      # provider returns for the `user-agent` below; only vless and hysteria2
-      # configs are read. Names are exactly what that client shows, so check
-      # them in the client first (in xray-json a name is the entry's remarks,
-      # shared by all its servers). Configs chained through another outbound
-      # (dialerProxy) are skipped. If the subscription is unreachable or
-      # nothing matches, the item is skipped.
+      # RE2) tested against config names: unanchored and case-sensitive. Only
+      # the first matching config is used; set `all: true` to add every match.
+      # The subscription may be base64/plain links, xray-json, sing-box or
+      # mihomo, whichever the provider returns for the `user-agent` below;
+      # only vless and hysteria2 configs are read. Names are exactly what that
+      # client shows, so check them in the client first (in xray-json a name
+      # is the entry's remarks, shared by all its servers). Configs chained
+      # through another outbound (dialerProxy) are skipped. If the
+      # subscription is unreachable or nothing matches, the item is skipped.
+      #
+      # Extra placeholders for `match` items:
+      #   {remark}  the name found in the subscription
+      #   {n}       running number of the config in this add-on (1, 2, ...)
+      #   {dup}     empty for the first config with a given resulting name,
+      #             " #2", " #3"... for repeats of it
+      #   {name}    every named group (?P<name>...) of the regular expression
+      #
+      # --- Examples (names look like "🇩🇪 Germany | Hysteria 2 · Salamander") ---
+      #
+      # Plain substring / several words in order:
+      #   match: "Germany.*Salamander"
+      # Exact name:
+      #   match: '^🇩🇪 Germany \| Hysteria 2$'
+      # Either of two countries (alternation):
+      #   match: "(Germany|Netherlands).*Hysteria"
+      # Case-insensitive (the (?i) flag):
+      #   match: "(?i)germany.*salamander"
+      # Ends right after "Hysteria 2" (no Salamander or id tag after it):
+      #   match: 'Germany.*Hysteria 2$'
+      # Starts with a flag emoji:
+      #   match: '^\p{So}+ '
+      #
+      # Named groups become placeholders in `remark`:
+      #   - remark: "LTE · {flag}{dup} · {remaining} of {limit} GB"
+      #     match: '^(?P<flag>\S+) .*(Germany|Netherlands)'
+      #     all: true
+      #   -> "LTE · 🇩🇪 · 34.4 of 35 GB", "LTE · 🇩🇪 #2 · ..." for a repeated flag
+      #
+      #   - remark: "{country}{dup} · {remaining}/{limit} GB"
+      #     match: '\| (?P<country>[^·|]+?) · Hysteria.*Salamander'
+      #     all: true
+      #   -> "Germany · 34.4/35 GB" (the text between "| " and " · Hysteria")
+      #
+      #   - remark: "LTE #{n} · {id}"
+      #     match: ' · (?P<id>[0-9a-f]{6})$'
+      #     all: true
+      #   -> "LTE #1 · 733fe4", "LTE #2 · e61b9c" (a trailing 6-hex tag)
+      #
+      # Several items may match the same config; each makes its own entry, so
+      # keep the patterns disjoint unless you want duplicates.
       - remark: "{remark} · {remaining} of {limit} GB left"
         match: "Germany.*Salamander"
         # all: true
     # Where traffic numbers come from: the Subscription-Userinfo header of
-    # this URL (and the configs for `match` from its body). Headers are sent only with this request (use them to pass
-    # the HWID check). Without `usage`, the panel add-on user's numbers are used.
+    # this URL (and the configs for `match` from its body). Headers are sent
+    # only with this request (use them to pass the HWID check). Without
+    # `usage`, the panel add-on user's numbers are used.
     usage:
       url: https://provider.example/sub/TOKEN
       headers:

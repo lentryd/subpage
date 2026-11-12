@@ -573,3 +573,34 @@ func TestResolveStaticMatchRegexAndAll(t *testing.T) {
 		t.Fatalf("%q want %q", got, want)
 	}
 }
+
+func TestMatchGroups(t *testing.T) {
+	l := LinkItem{Match: `^(?P<flag>\S+) .*Белые.*\| (?P<country>[^·|]+?) · Hysteria.*Salamander`}
+	g, ok := l.match("🇳🇱 🌩 Белые списки | Нидерланды · Hysteria 2 · Salamander · 733fe4")
+	if !ok || g["flag"] != "🇳🇱" || g["country"] != "Нидерланды" {
+		t.Fatalf("got %v %v", g, ok)
+	}
+	if _, ok := l.match("🇳🇱 Нидерланды+ · Hysteria 2 · Salamander"); ok {
+		t.Fatal("must not match")
+	}
+	if g, _ := (LinkItem{Match: `(?P<n>x)`}).match("x"); len(g) != 0 {
+		t.Fatalf("reserved name leaked: %v", g)
+	}
+}
+
+func TestResolveStaticLinksDup(t *testing.T) {
+	panel := fakePanel(t, StatusActive, 0, 0, 0)
+	defer panel.Close()
+	var hits, status atomic.Int32
+	usage, _ := usageServer(t, &hits, &status)
+	s := staticService(t, panel, usage.URL)
+	s.cfg.Addons[0].Links = []LinkItem{
+		{Remark: "F{dup} {remaining}", Link: staticVless},
+		{Remark: "F{dup} {remaining}", Link: staticHy2},
+		{Remark: "F{dup} {remaining}", Link: staticVless},
+	}
+	c := resolveStatic(t, s).Addition.Configs
+	if len(c) != 3 || c[0].Name != "F 7" || c[1].Name != "F #2 7" || c[2].Name != "F #3 7" {
+		t.Fatalf("%+v", c)
+	}
+}

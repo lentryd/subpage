@@ -318,7 +318,8 @@ func (s *Service) staticConfigs(ctx context.Context, a Addon, user *panelUser) [
 		info, known, provider = d.info, ok && d.hasInfo, d.links
 	}
 	out := make([]StaticConfig, 0, len(a.Links))
-	add := func(l LinkItem, link string) {
+	seen := map[string]int{}
+	add := func(l LinkItem, link string, groups map[string]string) {
 		original := ""
 		if p, err := ParseLink(link); err == nil {
 			original = p.Name
@@ -330,20 +331,32 @@ func (s *Service) staticConfigs(ctx context.Context, a Addon, user *panelUser) [
 				tmpl = a.RemarkUnlimited
 			}
 		}
-		out = append(out, StaticConfig{Link: link, Name: staticRemark(tmpl, original, info, known)})
+		pairs := []string{"{n}", strconv.Itoa(len(out) + 1)}
+		for name, v := range groups {
+			pairs = append(pairs, "{"+name+"}", v)
+		}
+		tmpl = strings.NewReplacer(pairs...).Replace(tmpl)
+		// {dup} is empty for the first config with a given name and " #2",
+		// " #3"... for the repeats, so equal names stay distinguishable.
+		name := staticRemark(strings.ReplaceAll(tmpl, "{dup}", ""), original, info, known)
+		if seen[name]++; seen[name] > 1 {
+			name = staticRemark(strings.ReplaceAll(tmpl, "{dup}", fmt.Sprintf(" #%d", seen[name])), original, info, known)
+		}
+		out = append(out, StaticConfig{Link: link, Name: name})
 	}
 	for _, l := range a.Links {
 		if l.Match == "" {
-			add(l, l.Link)
+			add(l, l.Link, nil)
 			continue
 		}
 		found := false
 		for _, p := range provider {
-			if !l.matches(p.Name) {
+			groups, ok := l.match(p.Name)
+			if !ok {
 				continue
 			}
 			found = true
-			add(l, p.Link)
+			add(l, p.Link, groups)
 			if !l.All {
 				break
 			}
@@ -355,16 +368,30 @@ func (s *Service) staticConfigs(ctx context.Context, a Addon, user *panelUser) [
 	return out
 }
 
-// matches reports whether name satisfies Match; LoadConfig precompiles it.
-func (l LinkItem) matches(name string) bool {
+// match reports whether name satisfies Match (LoadConfig precompiles it) and
+// returns the text of its named groups, usable as {name} in the remark. Groups
+// named like a built-in placeholder are ignored.
+func (l LinkItem) match(name string) (map[string]string, bool) {
 	re := l.matchRe
 	if re == nil {
 		var err error
 		if re, err = regexp.Compile(l.Match); err != nil {
-			return false
+			return nil, false
 		}
 	}
-	return re.MatchString(name)
+	m := re.FindStringSubmatch(name)
+	if m == nil {
+		return nil, false
+	}
+	groups := map[string]string{}
+	for i, g := range re.SubexpNames() {
+		switch g {
+		case "", "n", "dup", "remark", "remaining", "limit", "used":
+		default:
+			groups[g] = m[i]
+		}
+	}
+	return groups, true
 }
 
 func (a Addon) hasMatch() bool {
