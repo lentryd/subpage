@@ -175,8 +175,8 @@ func TestMergeStaticSingbox(t *testing.T) {
 func TestMergeStaticXray(t *testing.T) {
 	main := `[{"remarks":"DE","outbounds":[]}]`
 	out, n, err := Merge([]byte(main), staticAdd("Extra", "hy2"))
-	if err != nil || n != 1 {
-		t.Fatalf("hysteria2 must be skipped for xray: n=%d err=%v", n, err)
+	if err != nil || n != 2 {
+		t.Fatalf("both links must be rendered for xray: n=%d err=%v", n, err)
 	}
 	var got []struct {
 		Remarks   string           `json:"remarks"`
@@ -185,7 +185,10 @@ func TestMergeStaticXray(t *testing.T) {
 	if err := json.Unmarshal(out, &got); err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 || got[1].Remarks != "Extra" || len(got[1].Outbounds) != 1 {
+	if len(got) != 3 || got[1].Remarks != "Extra" || len(got[1].Outbounds) != 1 {
+		t.Fatalf("%s", out)
+	}
+	if hy := got[2]; hy.Remarks != "hy2" || hy.Outbounds[0]["protocol"] != "hysteria" || hy.Outbounds[0]["tag"] != "proxy" {
 		t.Fatalf("%s", out)
 	}
 	ob := got[1].Outbounds[0]

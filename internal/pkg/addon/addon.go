@@ -87,6 +87,22 @@ type Addon struct {
 	Links []LinkItem `yaml:"links"`
 	// Usage is the external source of traffic numbers for Links.
 	Usage *Usage `yaml:"usage"`
+	// Xray controls how Links are merged into xray-json output.
+	Xray XrayOptions `yaml:"xray"`
+}
+
+// XrayOptions control how a static add-on is merged into xray-json output.
+type XrayOptions struct {
+	// Into is a Go RE2 regexp tested against the remarks of the panel's
+	// xray configs. The first match receives the add-on servers as extra
+	// outbounds instead of them being added as separate configs.
+	Into string `yaml:"into"`
+	// Remark is the template for the target config's remarks; {remark} is
+	// its original remarks, plus {remaining}, {limit}, {used}. Defaults to
+	// "{remark}" (unchanged).
+	Remark string `yaml:"remark"`
+
+	intoRe *regexp.Regexp
 }
 
 func (a Addon) username(main string) string { return a.Prefix + main + a.Suffix }
@@ -156,6 +172,19 @@ func LoadConfig(path string) (Config, error) {
 				if _, err := ParseLink(l.Link); err != nil {
 					return cfg, fmt.Errorf("addons[%d].links[%d]: %w", i, j, err)
 				}
+			}
+		}
+		if a.Xray.Into != "" {
+			if len(a.Links) == 0 {
+				return cfg, fmt.Errorf("addons[%d].xray.into requires links", i)
+			}
+			re, err := regexp.Compile(a.Xray.Into)
+			if err != nil {
+				return cfg, fmt.Errorf("addons[%d].xray.into: %w", i, err)
+			}
+			a.Xray.intoRe = re
+			if a.Xray.Remark == "" {
+				a.Xray.Remark = "{remark}"
 			}
 		}
 		if a.Usage != nil {
@@ -277,13 +306,14 @@ func (s *Service) resolveOne(ctx context.Context, a Addon, mainUsername, clientT
 
 	if user.Status != StatusActive {
 		if stub := a.Stubs[user.Status]; stub != "" {
-			res.Addition = &Addition{StubRemark: stub}
+			res.Addition = &Addition{StubRemark: stub, XrayInto: a.Xray.intoRe}
 		}
 		return res
 	}
 
 	if len(a.Links) > 0 {
-		res.Addition = &Addition{Configs: s.staticConfigs(ctx, a, user)}
+		cfgs, xrayRemark := s.staticConfigs(ctx, a, user)
+		res.Addition = &Addition{Configs: cfgs, XrayInto: a.Xray.intoRe, XrayRemark: xrayRemark}
 		return res
 	}
 
@@ -307,8 +337,10 @@ func (s *Service) resolveOne(ctx context.Context, a Addon, mainUsername, clientT
 // staticConfigs names each of the add-on's ready-made links. Traffic numbers
 // come from the external usage URL when configured, else from the panel
 // add-on user. Items with `match` take their link from the usage subscription
-// and are skipped when it is unavailable or has no config of that name.
-func (s *Service) staticConfigs(ctx context.Context, a Addon, user *panelUser) []StaticConfig {
+// and are skipped when it is unavailable or has no config of that name. The
+// second result is the target remarks template for xray.into ({remark} left
+// literal), empty when the add-on doesn't use it.
+func (s *Service) staticConfigs(ctx context.Context, a Addon, user *panelUser) ([]StaticConfig, string) {
 	info, known := UsageInfo{Used: user.used(), Total: user.TrafficLimitBytes}, true
 	var provider []providerLink
 	if a.Usage != nil {
@@ -365,7 +397,11 @@ func (s *Service) staticConfigs(ctx context.Context, a Addon, user *panelUser) [
 			slog.Warn("add-on match not found", "addon", a.Name, "match", l.Match)
 		}
 	}
-	return out
+	xrayRemark := ""
+	if a.Xray.intoRe != nil {
+		xrayRemark = staticRemark(a.Xray.Remark, "{remark}", info, known)
+	}
+	return out, xrayRemark
 }
 
 // match reports whether name satisfies Match (LoadConfig precompiles it) and

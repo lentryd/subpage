@@ -31,6 +31,10 @@ are appended to it, renamed to show the add-on's remaining traffic.
 Non-active add-ons can be shown as an unusable placeholder config with an
 explanatory name (e.g. "traffic limit reached, top up to continue").
 
+For xray-json subscriptions an add-on with static `links` can merge its
+servers into one of the panel's existing configs (`xray.into`), so the
+client's balancer picks the best server by ping; see `addons.example.yml`.
+
 Copy `addons.example.yml` to `addons.yml` next to `compose.yml` and edit it.
 Without the file nothing changes. Add-on users are looked up only by the
 username the panel returns for the requested subscription; the response

@@ -53,6 +53,12 @@ type Addition struct {
 	StubRemark string
 	// Configs are ready-made share links (static add-on). Used when Body is nil.
 	Configs []StaticConfig
+	// XrayInto, when set, merges Configs (or the stub) into the first xray-json
+	// config whose remarks match, instead of adding separate configs.
+	XrayInto *regexp.Regexp
+	// XrayRemark is the target's new remarks; {remark} is replaced by its
+	// original remarks. Empty leaves them unchanged.
+	XrayRemark string
 }
 
 // Merge appends add to main and returns the merged payload plus the number
@@ -257,6 +263,18 @@ func mergeXray(main []byte, add Addition) ([]byte, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
+	if add.XrayInto != nil && add.Body == nil {
+		if len(add.Configs) == 0 && add.StubRemark == "" {
+			out, err := encodeJSON(configs)
+			return out, 0, err
+		}
+		if idx, prefix, ok := intoTarget(configs, add.XrayInto); ok {
+			n := mergeXrayInto(configs, idx, prefix, add)
+			out, err := encodeJSON(configs)
+			return out, n, err
+		}
+		slog.Warn("add-on xray.into target not usable, adding separate configs", "into", add.XrayInto.String())
+	}
 	names := uniqueNamer{}
 	for _, c := range configs {
 		if r, ok := c["remarks"].(string); ok {
@@ -300,6 +318,102 @@ func mergeXray(main []byte, add Addition) ([]byte, int, error) {
 	}
 	out, err := encodeJSON(append(configs, extra...))
 	return out, len(extra), err
+}
+
+// intoTarget returns the index of the first xray config whose remarks match re
+// and the tag prefix its balancer selects servers by. ok is false when no
+// config matches or the match has no balancer or observatory selector (add-on
+// servers would never be picked there).
+func intoTarget(configs []map[string]any, re *regexp.Regexp) (idx int, prefix string, ok bool) {
+	for i, c := range configs {
+		if r, _ := c["remarks"].(string); !re.MatchString(r) {
+			continue
+		}
+		p := xraySelectorPrefix(c)
+		if p == "" {
+			return 0, "", false
+		}
+		return i, p, true
+	}
+	return 0, "", false
+}
+
+// xraySelectorPrefix is the first selector of the config's first balancer,
+// else the first burstObservatory subject selector, without a trailing dash.
+func xraySelectorPrefix(c map[string]any) string {
+	first := func(v any) string {
+		list, _ := v.([]any)
+		if len(list) == 0 {
+			return ""
+		}
+		s, _ := list[0].(string)
+		return strings.TrimRight(s, "-")
+	}
+	if routing, ok := c["routing"].(map[string]any); ok {
+		if bs, _ := routing["balancers"].([]any); len(bs) > 0 {
+			if b, ok := bs[0].(map[string]any); ok {
+				if p := first(b["selector"]); p != "" {
+					return p
+				}
+			}
+		}
+	}
+	if obs, ok := c["burstObservatory"].(map[string]any); ok {
+		return first(obs["subjectSelector"])
+	}
+	return ""
+}
+
+// mergeXrayInto appends add's servers to configs[idx] as <prefix>-addon-<n>
+// outbounds, placed after the config's own prefixed outbounds, and rewrites
+// its remarks. With only a stub it appends " · <stub>" to the remarks. It
+// returns the number of outbounds added.
+func mergeXrayInto(configs []map[string]any, idx int, prefix string, add Addition) int {
+	c := configs[idx]
+	remarks, _ := c["remarks"].(string)
+	if len(add.Configs) == 0 {
+		c["remarks"] = remarks + " · " + add.StubRemark
+		return 0
+	}
+	outbounds, _ := c["outbounds"].([]any)
+	tagPrefix := prefix + "-addon-"
+	next := 1
+	for _, o := range outbounds {
+		m, _ := o.(map[string]any)
+		tag, _ := m["tag"].(string)
+		if n, err := strconv.Atoi(strings.TrimPrefix(tag, tagPrefix)); err == nil && strings.HasPrefix(tag, tagPrefix) && n >= next {
+			next = n + 1
+		}
+	}
+	var added []any
+	for _, p := range add.proxies() {
+		ob, ok := p.XrayOutbound(tagPrefix + strconv.Itoa(next))
+		if !ok {
+			slog.Warn("add-on link skipped: protocol not supported in xray-json", "scheme", p.Scheme)
+			continue
+		}
+		next++
+		added = append(added, ob)
+	}
+	if len(added) == 0 {
+		return 0
+	}
+	at := len(outbounds)
+	for i, o := range outbounds {
+		m, _ := o.(map[string]any)
+		tag, _ := m["tag"].(string)
+		if strings.HasPrefix(tag, prefix) {
+			at = i + 1
+		} else if at == len(outbounds) && (tag == "direct" || tag == "block") {
+			at = i
+		}
+	}
+	merged := append(append(append([]any{}, outbounds[:at]...), added...), outbounds[at:]...)
+	c["outbounds"] = merged
+	if add.XrayRemark != "" {
+		c["remarks"] = strings.ReplaceAll(add.XrayRemark, "{remark}", remarks)
+	}
+	return len(added)
 }
 
 // ---------- sing-box ----------

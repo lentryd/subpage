@@ -36,7 +36,7 @@ addons:
   # `extra_<username>` must still exist in the panel and be ACTIVE (otherwise
   # `stubs` apply as above); the configs are added to every subscription
   # format. Supported links: vless://, hysteria2:// (hy2://). hysteria2 is
-  # skipped in xray-json output.
+  # rendered as an xray `hysteria` outbound in xray-json output.
   - name: extra
     prefix: extra_
     links:
@@ -117,3 +117,25 @@ addons:
     stubs:
       LIMITED: "Extra: traffic limit reached"
       EXPIRED: "Extra: subscription expired"
+
+    # xray-json only (Happ and similar clients), for add-ons with `links`.
+    # By default the servers are added as separate configs, so the client
+    # lists each one. With `into` they instead become extra outbounds of the
+    # panel's existing xray config whose remarks match this regular expression
+    # (Go RE2, first match only), e.g. a "Whitelist auto" config with a
+    # balancer, so the client picks the best server by ping. Add-ons are
+    # applied one after another, so a later add-on sees remarks already
+    # rewritten by `remark` or a stub: do not anchor the end with `$`.
+    #   - Outbounds are tagged <balancer prefix>-addon-<n> (the prefix is the
+    #     first selector of the target's first balancer, else of its
+    #     burstObservatory), so the balancer and observatory select them
+    #     without template changes.
+    #   - `remark` is the target's new remarks: {remark} (its original
+    #     remarks), {remaining}, {limit}, {used}. Default "{remark}".
+    #   - A stub (LIMITED/EXPIRED) is appended to the target's remarks
+    #     ("<remarks> · <stub>") instead of adding a placeholder config.
+    #   - If nothing matches, or the match has no balancer/observatory
+    #     selector, separate configs are added and a warning is logged.
+    # xray:
+    #   into: "^Whitelist auto"
+    #   remark: "{remark} · {remaining} of {limit} GB"

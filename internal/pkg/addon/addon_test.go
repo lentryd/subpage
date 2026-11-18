@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -602,5 +603,119 @@ func TestResolveStaticLinksDup(t *testing.T) {
 	c := resolveStatic(t, s).Addition.Configs
 	if len(c) != 3 || c[0].Name != "F 7" || c[1].Name != "F #2 7" || c[2].Name != "F #3 7" {
 		t.Fatalf("%+v", c)
+	}
+}
+
+func TestLoadConfigXrayInto(t *testing.T) {
+	cfg, err := writeCfg(t, `addons:
+  - prefix: p_
+    links:
+      - link: "hysteria2://pw@example.com:443#X"
+    xray:
+      into: "Auto$"
+      remark: "{remark} · {remaining} of {limit} GB"
+`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	x := cfg.Addons[0].Xray
+	if x.intoRe == nil || !x.intoRe.MatchString("🏳️ Auto") || x.Remark != "{remark} · {remaining} of {limit} GB" {
+		t.Fatalf("%+v", x)
+	}
+}
+
+func TestLoadConfigXrayIntoDefaultRemark(t *testing.T) {
+	cfg, err := writeCfg(t, `addons:
+  - prefix: p_
+    links:
+      - link: "hysteria2://pw@example.com:443#X"
+    xray:
+      into: "Auto"
+`)
+	if err != nil || cfg.Addons[0].Xray.Remark != "{remark}" {
+		t.Fatalf("%+v %v", cfg.Addons[0].Xray, err)
+	}
+}
+
+func TestLoadConfigXrayIntoInvalid(t *testing.T) {
+	for name, y := range map[string]string{
+		"regexp": `addons:
+  - prefix: p_
+    links:
+      - link: "hysteria2://pw@example.com:443#X"
+    xray:
+      into: "("
+`,
+		"needs links": `addons:
+  - prefix: p_
+    xray:
+      into: "Auto"
+`,
+	} {
+		_, err := writeCfg(t, y)
+		if err == nil || !strings.Contains(err.Error(), "xray.into") {
+			t.Errorf("%s: err = %v", name, err)
+		}
+	}
+}
+
+func withXrayInto(s *Service) {
+	s.cfg.Addons[0].Xray = XrayOptions{
+		Into: "Whitelist", Remark: "{remark} · {remaining} of {limit} GB", intoRe: regexp.MustCompile("Whitelist"),
+	}
+}
+
+func TestResolveStaticSetsXrayInto(t *testing.T) {
+	panel := fakePanel(t, StatusActive, 0, 0, 0)
+	defer panel.Close()
+	var hits, status atomic.Int32
+	usage, _ := usageServer(t, &hits, &status)
+	s := staticService(t, panel, usage.URL)
+	withXrayInto(s)
+	res := resolveStatic(t, s)
+	if res.Addition == nil || res.Addition.XrayInto == nil || res.Addition.XrayRemark != "{remark} · 7 of 10 GB" {
+		t.Fatalf("%+v", res.Addition)
+	}
+}
+
+func TestResolveStubSetsXrayInto(t *testing.T) {
+	panel := fakePanel(t, "LIMITED", 0, 0, 0)
+	defer panel.Close()
+	var hits, status atomic.Int32
+	usage, _ := usageServer(t, &hits, &status)
+	s := staticService(t, panel, usage.URL)
+	withXrayInto(s)
+	res := resolveStatic(t, s)
+	if res.Addition == nil || res.Addition.StubRemark != "limit reached" || res.Addition.XrayInto == nil {
+		t.Fatalf("%+v", res.Addition)
+	}
+}
+
+func TestResolveWithoutXrayLeavesFieldsEmpty(t *testing.T) {
+	panel := fakePanel(t, StatusActive, 0, 0, 0)
+	defer panel.Close()
+	var hits, status atomic.Int32
+	usage, _ := usageServer(t, &hits, &status)
+	res := resolveStatic(t, staticService(t, panel, usage.URL))
+	if res.Addition.XrayInto != nil || res.Addition.XrayRemark != "" {
+		t.Fatalf("%+v", res.Addition)
+	}
+}
+
+func TestMergeXrayIntoFromResolve(t *testing.T) {
+	panel := fakePanel(t, StatusActive, 0, 0, 0)
+	defer panel.Close()
+	var hits, status atomic.Int32
+	usage, _ := usageServer(t, &hits, &status)
+	s := staticService(t, panel, usage.URL)
+	withXrayInto(s)
+	res := resolveStatic(t, s)
+	out, n, err := Merge(intoMain(intoOther, intoTargetConfig), *res.Addition)
+	if err != nil || n != 2 {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	got := decodeConfigs(t, out)
+	if len(got) != 2 || got[1]["remarks"] != "🏳️ Whitelist auto · 7 of 10 GB" || len(outboundTags(got[1])) != 6 {
+		t.Fatalf("%s", out)
 	}
 }

@@ -194,12 +194,62 @@ func (p Proxy) Singbox() map[string]any {
 
 // ---------- xray-json ----------
 
-// Xray renders the proxy as an xray-json subscription entry named p.Name. It
-// reports false for protocols xray-json output does not cover (hysteria2).
+// Xray renders the proxy as an xray-json subscription entry named p.Name with
+// a single outbound tagged "proxy". It reports false for unsupported schemes.
 func (p Proxy) Xray() (map[string]any, bool) {
-	if p.Scheme != "vless" {
+	ob, ok := p.XrayOutbound("proxy")
+	if !ok {
 		return nil, false
 	}
+	return map[string]any{"remarks": p.Name, "outbounds": []any{ob}}, true
+}
+
+// XrayOutbound renders the proxy as one xray outbound with the given tag. It
+// reports false for schemes other than vless and hysteria2.
+func (p Proxy) XrayOutbound(tag string) (map[string]any, bool) {
+	switch p.Scheme {
+	case "vless":
+		return p.xrayVless(tag), true
+	case "hysteria2":
+		return p.xrayHysteria(tag), true
+	}
+	return nil, false
+}
+
+// xrayHysteria matches the shape the panel itself emits for hysteria hosts.
+func (p Proxy) xrayHysteria(tag string) map[string]any {
+	q := p.Params
+	alpn := splitComma(q.Get("alpn"))
+	if len(alpn) == 0 {
+		alpn = []string{"h3"}
+	}
+	tls := map[string]any{"alpn": alpn, "enableSessionResumption": false}
+	setIf(tls, "serverName", q.Get("sni"))
+	if q.Get("insecure") == "1" {
+		tls["allowInsecure"] = true
+	}
+	mask := map[string]any{"quicParams": map[string]any{"congestion": "bbr", "debug": false}}
+	if q.Get("obfs") == "salamander" {
+		mask["udp"] = []any{map[string]any{
+			"type":     "salamander",
+			"settings": map[string]any{"password": q.Get("obfs-password")},
+		}}
+	}
+	return map[string]any{
+		"tag":      tag,
+		"protocol": "hysteria",
+		"settings": map[string]any{"address": p.Server, "port": p.Port, "version": 2},
+		"streamSettings": map[string]any{
+			"network":          "hysteria",
+			"security":         "tls",
+			"hysteriaSettings": map[string]any{"auth": p.Secret, "version": 2},
+			"tlsSettings":      tls,
+			"finalmask":        mask,
+		},
+	}
+}
+
+func (p Proxy) xrayVless(tag string) map[string]any {
 	q := p.Params
 	user := map[string]any{"id": p.Secret, "encryption": "none"}
 	setIf(user, "flow", q.Get("flow"))
@@ -242,14 +292,11 @@ func (p Proxy) Xray() (map[string]any, bool) {
 		ss["grpcSettings"] = g
 	}
 	return map[string]any{
-		"remarks": p.Name,
-		"outbounds": []any{map[string]any{
-			"tag":      "proxy",
-			"protocol": "vless",
-			"settings": map[string]any{"vnext": []any{map[string]any{
-				"address": p.Server, "port": p.Port, "users": []any{user},
-			}}},
-			"streamSettings": ss,
-		}},
-	}, true
+		"tag":      tag,
+		"protocol": "vless",
+		"settings": map[string]any{"vnext": []any{map[string]any{
+			"address": p.Server, "port": p.Port, "users": []any{user},
+		}}},
+		"streamSettings": ss,
+	}
 }
