@@ -1,5 +1,5 @@
 import { ThemeIcon } from '@/shared/ui/ThemeIcon'
-import { getColorGradientSolid, getLocalizedText } from '@/shared/utils/config-parser'
+import { getLocalizedText } from '@/shared/utils/config-parser'
 import { Stack, Text, Timeline } from '@mantine/core'
 
 import { IBlockRendererProps } from '../rendererBlock.types'
@@ -22,27 +22,23 @@ export const TimelineBlockRenderer = ({
                 item: classes.timelineItem,
                 itemBullet: classes.timelineItemBullet,
             }}
-            color="cyan"
+            color="gray"
             lineWidth={2}
         >
             {blocks.map((block, index) => {
-                const gradientStyle = getColorGradientSolid(block.svgIconColor)
-
                 return (
                     <Timeline.Item
                         bullet={
                             <ThemeIcon
                                 getIconFromLibrary={getIconFromLibrary}
-                                gradientStyle={gradientStyle}
                                 isMobile={isMobile}
-                                svgIconColor={block.svgIconColor}
                                 svgIconKey={block.svgIconKey}
                             />
                         }
                         key={index}
                         title={
                             <Text
-                                c="white"
+                                c="var(--app-text-strong)"
                                 dangerouslySetInnerHTML={{
                                     __html: getLocalizedText(block.title, currentLang),
                                 }}
@@ -60,7 +56,7 @@ export const TimelineBlockRenderer = ({
                                 size={isMobile ? 'xs' : 'sm'}
                                 style={{ lineHeight: 1.6 }}
                             />
-                            {renderBlockButtons(block.buttons, 'light')}
+                            {renderBlockButtons(block.buttons)}
                         </Stack>
                     </Timeline.Item>
                 )

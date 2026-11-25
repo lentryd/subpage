@@ -1,5 +1,5 @@
 import { ThemeIcon } from '@/shared/ui/ThemeIcon'
-import { getColorGradient, getLocalizedText } from '@/shared/utils/config-parser'
+import { getLocalizedText } from '@/shared/utils/config-parser'
 import { Box, Group, Stack, Text } from '@mantine/core'
 
 import { IBlockRendererProps } from '../rendererBlock.types'
@@ -16,20 +16,16 @@ export const MinimalBlockRenderer = ({
     return (
         <Stack gap="md">
             {blocks.map((block, index) => {
-                const gradientStyle = getColorGradient(block.svgIconColor)
-
                 return (
                     <Box className={classes.stepBlock} key={index}>
                         <Group gap="sm" mb="xs" wrap="nowrap">
                             <ThemeIcon
                                 getIconFromLibrary={getIconFromLibrary}
-                                gradientStyle={gradientStyle}
                                 isMobile={isMobile}
-                                svgIconColor={block.svgIconColor}
                                 svgIconKey={block.svgIconKey}
                             />
                             <Text
-                                c="white"
+                                c="var(--app-text-strong)"
                                 dangerouslySetInnerHTML={{
                                     __html: getLocalizedText(block.title, currentLang),
                                 }}
@@ -46,7 +42,7 @@ export const MinimalBlockRenderer = ({
                             style={{ lineHeight: 1.6 }}
                         />
                         {block.buttons.length > 0 && (
-                            <Box style={{ marginTop: 8 }}>{renderBlockButtons(block.buttons, 'subtle')}</Box>
+                            <Box style={{ marginTop: 8 }}>{renderBlockButtons(block.buttons)}</Box>
                         )}
                     </Box>
                 )

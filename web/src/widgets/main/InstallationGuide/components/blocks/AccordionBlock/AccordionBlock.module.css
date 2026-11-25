@@ -1,11 +1,11 @@
 .accordionItem {
-    background: rgb(255 255 255 / 2%);
-    border: 1px solid rgb(255 255 255 / 8%);
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
 }
 
 .accordionItem[data-active] {
-    background: rgb(255 255 255 / 3%);
-    border-color: rgb(34 211 238 / 30%);
+    background: var(--app-surface);
+    border-color: color-mix(in srgb, var(--mantine-primary-color-filled) 45%, transparent);
 }
 
 .accordionControl {
@@ -14,7 +14,7 @@
 }
 
 .accordionControl:hover {
-    background: rgb(255 255 255 / 2%);
+    background: var(--app-fill);
     border-radius: var(--mantine-radius-lg);
 }
 

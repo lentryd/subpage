@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 import { ThemeIcon } from '@/shared/ui/ThemeIcon'
-import { getColorGradient, getLocalizedText } from '@/shared/utils/config-parser'
+import { getLocalizedText } from '@/shared/utils/config-parser'
 import { vibrate } from '@/shared/utils/vibrate'
 import { Accordion, Group, Stack, Text } from '@mantine/core'
 import { IconChevronDown } from '@tabler/icons-react'
@@ -39,22 +39,18 @@ export const AccordionBlockRenderer = ({
             variant="separated"
         >
             {blocks.map((block, index) => {
-                const gradientStyle = getColorGradient(block.svgIconColor)
-
                 return (
                     <Accordion.Item key={index} value={String(index)}>
                         <Accordion.Control>
                             <Group gap="sm" wrap="nowrap">
                                 <ThemeIcon
                                     getIconFromLibrary={getIconFromLibrary}
-                                    gradientStyle={gradientStyle}
                                     isMobile={isMobile}
-                                    svgIconColor={block.svgIconColor}
                                     svgIconKey={block.svgIconKey}
                                 />
                                 <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
                                     <Text
-                                        c="white"
+                                        c="var(--app-text-strong)"
                                         dangerouslySetInnerHTML={{
                                             __html: getLocalizedText(block.title, currentLang),
                                         }}
@@ -79,7 +75,7 @@ export const AccordionBlockRenderer = ({
                                 style={{ lineHeight: 1.7 }}
                             />
                             <Group gap="xs" mt="sm" wrap="wrap">
-                                {renderBlockButtons(block.buttons, 'light')}
+                                {renderBlockButtons(block.buttons)}
                             </Group>
                         </Accordion.Panel>
                     </Accordion.Item>

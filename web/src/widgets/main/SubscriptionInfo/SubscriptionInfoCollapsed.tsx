@@ -4,6 +4,7 @@ import { useSubscription } from '@/entities/subscription-info-store'
 import { useTranslation } from '@/shared/hooks'
 import { InfoBlock } from '@/shared/ui/InfoBlock'
 import { formatDate, getColorGradientSolid, getExpirationTextUtil } from '@/shared/utils/config-parser'
+import { getTrafficUsagePercent } from '@/shared/utils/traffic-usage'
 import { vibrate } from '@/shared/utils/vibrate'
 import { Card, Collapse, Group, SimpleGrid, Stack, Text, ThemeIcon, UnstyledButton } from '@mantine/core'
 import {
@@ -15,6 +16,8 @@ import {
     IconUserScan,
     IconX,
 } from '@tabler/icons-react'
+
+import { getExpiryColor } from './expiry-color'
 
 interface IProps {
     isMobile: boolean
@@ -62,14 +65,14 @@ export const SubscriptionInfoCollapsedWidget = ({ isMobile }: IProps) => {
                                 boxShadow: gradientColor.boxShadow,
                                 flexShrink: 0,
                             }}
-                            variant="light"
+                            variant="soft"
                         >
                             {status.icon}
                         </ThemeIcon>
 
                         <Stack gap={0} style={{ minWidth: 0, flex: 1 }}>
                             <Text
-                                c="white"
+                                c="var(--app-text-strong)"
                                 fw={600}
                                 size={isMobile ? 'sm' : 'md'}
                                 style={{
@@ -103,7 +106,7 @@ export const SubscriptionInfoCollapsedWidget = ({ isMobile }: IProps) => {
                 <Stack gap="xs" pb={{ base: 'xs', sm: 'sm' }} px={{ base: 'xs', sm: 'sm' }}>
                     <SimpleGrid cols={2} spacing="xs" verticalSpacing="xs">
                         <InfoBlock
-                            color="blue"
+                            color="gray"
                             icon={<IconUserScan size={16} />}
                             title={t(baseTranslations.name)}
                             value={user.username}
@@ -119,15 +122,16 @@ export const SubscriptionInfoCollapsedWidget = ({ isMobile }: IProps) => {
                         />
 
                         <InfoBlock
-                            color="red"
+                            color={getExpiryColor(user.daysLeft)}
                             icon={<IconCalendar size={16} />}
                             title={t(baseTranslations.expires)}
                             value={formatDate(user.expiresAt, currentLang, baseTranslations)}
                         />
 
                         <InfoBlock
-                            color="yellow"
+                            color="gray"
                             icon={<IconArrowsUpDown size={16} />}
+                            progress={getTrafficUsagePercent(user.trafficUsedBytes, user.trafficLimitBytes)}
                             title={t(baseTranslations.bandwidth)}
                             value={`${user.trafficUsed} / ${user.trafficLimit === '0' ? '∞' : user.trafficLimit}`}
                         />

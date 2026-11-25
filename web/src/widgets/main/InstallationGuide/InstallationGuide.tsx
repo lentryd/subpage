@@ -8,7 +8,7 @@ import { getIconFromLibrary } from '@/shared/utils/config-parser'
 import { constructSubscriptionUrl } from '@/shared/utils/construct-subscription-url'
 import { TemplateEngine } from '@/shared/utils/template-engine'
 import { vibrate } from '@/shared/utils/vibrate'
-import { Box, Button, ButtonVariant, Card, Group, NativeSelect, Stack, Title, UnstyledButton } from '@mantine/core'
+import { Box, Button, Card, Group, NativeSelect, Stack, Title, UnstyledButton } from '@mantine/core'
 import { useClipboard } from '@mantine/hooks'
 import { notifications } from '@mantine/notifications'
 import {
@@ -85,7 +85,7 @@ export const InstallationGuideConnector = (props: IProps) => {
                 notifications.show({
                     title: t(baseTranslations.linkCopied),
                     message: t(baseTranslations.linkCopiedToClipboard),
-                    color: 'cyan',
+                    color: 'brand',
                 })
                 break
             }
@@ -104,7 +104,7 @@ export const InstallationGuideConnector = (props: IProps) => {
         }
     }
 
-    const renderBlockButtons = (buttons: TSubscriptionPageButtonConfig[], variant: ButtonVariant) => {
+    const renderBlockButtons = (buttons: TSubscriptionPageButtonConfig[]) => {
         if (buttons.length === 0) return null
 
         return (
@@ -122,7 +122,7 @@ export const InstallationGuideConnector = (props: IProps) => {
                         }
                         onClick={() => handleButtonClick(button)}
                         radius="md"
-                        variant={variant}
+                        variant={button.type === 'subscriptionLink' ? 'filled' : 'default'}
                     >
                         {t(button.text)}
                     </Button>
@@ -137,7 +137,7 @@ export const InstallationGuideConnector = (props: IProps) => {
         <Card p={{ base: 'sm', xs: 'md', sm: 'lg', md: 'xl' }} radius="lg">
             <Stack gap="md">
                 <Group gap="sm" justify="space-between">
-                    <Title c="white" fw={600} order={4}>
+                    <Title c="var(--app-text-strong)" fw={600} order={4}>
                         {t(baseTranslations.installationGuideHeader)}
                     </Title>
 

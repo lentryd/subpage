@@ -1,4 +1,3 @@
-import { ButtonVariant } from '@mantine/core'
 import {
     TSubscriptionPageBlockConfig,
     TSubscriptionPageButtonConfig,
@@ -10,6 +9,6 @@ export interface IBlockRendererProps {
     currentLang: TSubscriptionPageLanguageCode
     getIconFromLibrary: (iconKey: string) => string
     isMobile: boolean
-    renderBlockButtons: (buttons: TSubscriptionPageButtonConfig[], variant: ButtonVariant) => React.ReactNode
+    renderBlockButtons: (buttons: TSubscriptionPageButtonConfig[]) => React.ReactNode
     svgLibrary: Record<string, string>
 }

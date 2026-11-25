@@ -1,52 +1,47 @@
 import { useSubscription } from '@/entities/subscription-info-store'
 import { useTranslation } from '@/shared/hooks'
 import { formatDate } from '@/shared/utils/config-parser'
-import { Box, Group, SimpleGrid, Stack, Text, ThemeIcon } from '@mantine/core'
+import { getTrafficUsageColor, getTrafficUsagePercent } from '@/shared/utils/traffic-usage'
+import { Box, Group, Progress, SimpleGrid, Stack, Text, ThemeIcon } from '@mantine/core'
 import { IconArrowsUpDown, IconCalendar, IconCheck, IconUserScan, IconX } from '@tabler/icons-react'
+
+import { getExpiryColor } from './expiry-color'
 
 import classes from './SubscriptionInfoCards.module.css'
 
-type ColorVariant = 'blue' | 'cyan' | 'green' | 'orange' | 'red' | 'teal' | 'violet' | 'yellow'
-
-const iconColorClasses: Record<ColorVariant, string> = {
-    blue: classes.iconBlue,
-    cyan: classes.iconCyan,
-    green: classes.iconGreen,
-    teal: classes.iconTeal,
-    red: classes.iconRed,
-    yellow: classes.iconYellow,
-    orange: classes.iconOrange,
-    violet: classes.iconViolet,
-}
+type ColorVariant = 'gray' | 'green' | 'orange' | 'red'
 
 interface CardItemProps {
     color: ColorVariant
     icon: React.ReactNode
     label: string
+    progress?: null | number
     value: string
 }
 
-const CardItem = ({ icon, label, value, color }: CardItemProps) => {
+const CardItem = ({ icon, label, progress, value, color }: CardItemProps) => {
     return (
         <Box className={classes.cardItem}>
             <Group gap="xs" wrap="nowrap">
-                <ThemeIcon
-                    className={iconColorClasses[color]}
-                    color={color}
-                    radius="md"
-                    size={36}
-                    style={{ flexShrink: 0 }}
-                    variant="light"
-                >
+                <ThemeIcon color={color} radius="md" size={36} style={{ flexShrink: 0 }} variant="soft">
                     {icon}
                 </ThemeIcon>
                 <Stack gap={2} style={{ minWidth: 0, flex: 1 }}>
-                    <Text c="dimmed" className={classes.label} fw={500} lh={1} size="xs" tt="uppercase">
+                    <Text c="dimmed" className={classes.label} fw={500} lh={1} size="xs">
                         {label}
                     </Text>
-                    <Text c="white" className={classes.value} fw={600} size="sm">
+                    <Text c="var(--app-text-strong)" className={`${classes.value} num`} fw={600} size="sm">
                         {value}
                     </Text>
+                    {typeof progress === 'number' && (
+                        <Progress
+                            aria-label={label}
+                            color={getTrafficUsageColor(progress)}
+                            mt={4}
+                            size={6}
+                            value={progress}
+                        />
+                    )}
                 </Stack>
             </Group>
         </Box>
@@ -72,7 +67,7 @@ export const SubscriptionInfoCardsWidget = ({ isMobile: _ }: IProps) => {
     return (
         <SimpleGrid cols={{ base: 1, xs: 1, sm: 2 }} spacing="xs" verticalSpacing="xs">
             <CardItem
-                color="blue"
+                color="gray"
                 icon={<IconUserScan size={18} />}
                 label={t(baseTranslations.name)}
                 value={user.username}
@@ -86,16 +81,17 @@ export const SubscriptionInfoCardsWidget = ({ isMobile: _ }: IProps) => {
             />
 
             <CardItem
-                color="orange"
+                color={getExpiryColor(user.daysLeft)}
                 icon={<IconCalendar size={18} />}
                 label={t(baseTranslations.expires)}
                 value={formatDate(user.expiresAt, currentLang, baseTranslations)}
             />
 
             <CardItem
-                color="cyan"
+                color="gray"
                 icon={<IconArrowsUpDown size={18} />}
                 label={t(baseTranslations.bandwidth)}
+                progress={getTrafficUsagePercent(user.trafficUsedBytes, user.trafficLimitBytes)}
                 value={bandwidthValue}
             />
         </SimpleGrid>

@@ -9,11 +9,11 @@
 
 .label {
     text-align: center;
-    font-weight: 900;
+    font-weight: 700;
     font-size: 13.75rem;
     line-height: 1;
     margin-bottom: calc(var(--mantine-spacing-xl) * 1.5);
-    color: var(--mantine-color-blue-3);
+    color: var(--app-border-strong);
 
     @media (width <= 40em) {
         font-size: 7.5rem;
@@ -22,9 +22,9 @@
 
 .title {
     text-align: center;
-    font-weight: 900;
-    font-size: 2.375rem;
-    color: var(--mantine-color-white);
+    font-weight: 600;
+    font-size: 2rem;
+    color: var(--app-text-strong);
 
     @media (width <= 40em) {
         font-size: 2rem;
@@ -36,5 +36,5 @@
     margin: auto;
     margin-top: var(--mantine-spacing-xl);
     margin-bottom: calc(var(--mantine-spacing-xl) * 1.5);
-    color: var(--mantine-color-blue-1);
+    color: var(--app-text-muted);
 }

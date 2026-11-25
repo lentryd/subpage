@@ -2,8 +2,11 @@ import { useSubscription } from '@/entities/subscription-info-store'
 import { useTranslation } from '@/shared/hooks'
 import { InfoBlock } from '@/shared/ui/InfoBlock'
 import { formatDate, getColorGradientSolid, getExpirationTextUtil } from '@/shared/utils/config-parser'
+import { getTrafficUsagePercent } from '@/shared/utils/traffic-usage'
 import { Card, Group, SimpleGrid, Stack, Text, ThemeIcon, Title } from '@mantine/core'
 import { IconAlertCircle, IconArrowsUpDown, IconCalendar, IconCheck, IconUserScan, IconX } from '@tabler/icons-react'
+
+import { getExpiryColor } from './expiry-color'
 
 interface IProps {
     isMobile: boolean
@@ -59,14 +62,14 @@ export const SubscriptionInfoExpandedWidget = ({ isMobile }: IProps) => {
                                 boxShadow: gradientColor.boxShadow,
                                 flexShrink: 0,
                             }}
-                            variant="light"
+                            variant="soft"
                         >
                             {statusInfo.icon}
                         </ThemeIcon>
 
                         <Stack gap={2} style={{ minWidth: 0, flex: 1 }}>
                             <Title
-                                c="white"
+                                c="var(--app-text-strong)"
                                 fw={600}
                                 order={5}
                                 style={{
@@ -86,7 +89,7 @@ export const SubscriptionInfoExpandedWidget = ({ isMobile }: IProps) => {
 
                 <SimpleGrid cols={{ base: 2, xs: 2, sm: 2 }} spacing="xs" verticalSpacing="xs">
                     <InfoBlock
-                        color="blue"
+                        color="gray"
                         icon={<IconUserScan size={16} />}
                         title={t(baseTranslations.name)}
                         value={user.username}
@@ -100,15 +103,16 @@ export const SubscriptionInfoExpandedWidget = ({ isMobile }: IProps) => {
                     />
 
                     <InfoBlock
-                        color="red"
+                        color={getExpiryColor(user.daysLeft)}
                         icon={<IconCalendar size={16} />}
                         title={t(baseTranslations.expires)}
                         value={formatDate(user.expiresAt, currentLang, baseTranslations)}
                     />
 
                     <InfoBlock
-                        color="yellow"
+                        color="gray"
                         icon={<IconArrowsUpDown size={16} />}
+                        progress={getTrafficUsagePercent(user.trafficUsedBytes, user.trafficLimitBytes)}
                         title={t(baseTranslations.bandwidth)}
                         value={`${user.trafficUsed} / ${user.trafficLimit === '0' ? '∞' : user.trafficLimit}`}
                     />

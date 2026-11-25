@@ -20,7 +20,7 @@ export function ServerError() {
                     Try to refresh the page.
                 </Text>
                 <Group justify="center">
-                    <Button onClick={handleRefresh} size="md" variant="outline">
+                    <Button onClick={handleRefresh} size="md" variant="default">
                         Refresh the page
                     </Button>
                 </Group>

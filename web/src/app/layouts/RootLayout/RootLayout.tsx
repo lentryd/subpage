@@ -66,7 +66,6 @@ export function RootLayout() {
     if (!isConfigLoaded || !subscription) {
         return (
             <div className={classes.root}>
-                <div className="animated-background"></div>
                 <div className={classes.content}>
                     <main className={classes.main}>
                         <LoadingScreen height="100vh" />
@@ -78,7 +77,6 @@ export function RootLayout() {
 
     return (
         <div className={classes.root}>
-            <div className="animated-background"></div>
             <div className={classes.content}>
                 <main className={classes.main}>
                     <Outlet />

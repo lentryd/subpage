@@ -84,9 +84,9 @@ export const MainPage = ({ isMobile, platform }: IMainPageProps) => {
                                     }}
                                 />
                             ) : (
-                                <RemnawaveLogo c="cyan" size={32} />
+                                <RemnawaveLogo c="brand" size={32} />
                             )}
-                            <Title c={hasCustomLogo ? 'white' : 'cyan'} fw={700} order={4} size="lg">
+                            <Title c={hasCustomLogo ? 'var(--app-text-strong)' : 'brand'} fw={700} order={4} size="lg">
                                 {brandName}
                             </Title>
                         </Group>

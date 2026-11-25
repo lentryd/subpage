@@ -4,8 +4,9 @@
         <base href="/" />
         <meta charset="UTF-8" />
         <meta name="robots" content="noindex, nofollow" />
-        <meta name="color-scheme" content="dark only" />
-        <meta name="theme-color" content="#161B23" />
+        <meta name="color-scheme" content="light dark" />
+        <meta name="theme-color" content="#f6f6f7" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)" />
         <meta name="viewport" content="minimum-scale=1, initial-scale=1, width=device-width, user-scalable=no" />
         <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
         <link rel="icon" sizes="32x32" type="image/png" href="/assets/favicon-32x32.png" />
@@ -15,10 +16,6 @@
         <link rel="preconnect" crossorigin="anonymous" href="https://fonts.googleapis.com" />
         <link rel="preconnect" crossorigin="anonymous" href="https://fonts.gstatic.com" />
 
-        <link
-            href="https://fonts.googleapis.com/css2?family=Fira+Mono:wght@400;500;700&family=Montserrat:ital,wght@0,100..900;1,100..900&family=Unbounded:wght@200..900&display=swap"
-            rel="stylesheet"
-        />
         <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@100..900&display=swap" rel="stylesheet" />
         <link
             href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@100..900&display=swap"
@@ -28,11 +25,35 @@
         <meta name="description" content="{{.MetaDescription}}" />
         <title>{{.MetaTitle}}</title>
 
+        <script>
+            // Apply the saved colour scheme before the first paint (no flash).
+            try {
+                var s = localStorage.getItem('mantine-color-scheme-value') || 'auto'
+                if (s === 'auto') s = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+                document.documentElement.setAttribute('data-mantine-color-scheme', s)
+            } catch (e) {
+                document.documentElement.setAttribute(
+                    'data-mantine-color-scheme',
+                    matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+                )
+            }
+        </script>
+
         <style>
+            :root {
+                --il-bg: #f6f6f7;
+                --il-track: rgb(9 9 11 / 12%);
+            }
+
+            :root[data-mantine-color-scheme='dark'] {
+                --il-bg: #09090b;
+                --il-track: rgb(255 255 255 / 12%);
+            }
+
             html,
             body {
                 margin: 0;
-                background: #161b23;
+                background: var(--il-bg);
             }
 
             #initial-loader {
@@ -41,14 +62,14 @@
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                background: #161b23;
+                background: var(--il-bg);
             }
 
             #initial-loader .spinner {
-                width: 48px;
-                height: 48px;
-                border: 3px solid rgb(255 255 255 / 15%);
-                border-top-color: #22d3ee;
+                width: 40px;
+                height: 40px;
+                border: 3px solid var(--il-track);
+                border-top-color: #7958f8;
                 border-radius: 50%;
                 animation: initial-loader-spin 0.8s linear infinite;
             }

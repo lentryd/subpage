@@ -1,9 +1,9 @@
 import { polyfillCountryFlagEmojis } from 'country-flag-emoji-polyfill'
 import { enableMainThreadBlocking } from 'ios-vibrator-pro-max'
 
-import { theme } from '@/shared/constants'
+import { cssVariablesResolver, theme } from '@/shared/constants'
 import { initDayjs } from '@/shared/utils/time-utils'
-import { DirectionProvider, MantineProvider, v8CssVariablesResolver } from '@mantine/core'
+import { DirectionProvider, MantineProvider } from '@mantine/core'
 import { useMediaQuery } from '@mantine/hooks'
 import { ModalsProvider } from '@mantine/modals'
 import { Notifications } from '@mantine/notifications'
@@ -28,7 +28,7 @@ export function App() {
 
     return (
         <DirectionProvider>
-            <MantineProvider cssVariablesResolver={v8CssVariablesResolver} defaultColorScheme="dark" theme={theme}>
+            <MantineProvider cssVariablesResolver={cssVariablesResolver} defaultColorScheme="auto" theme={theme}>
                 <ModalsProvider>
                     <Notifications position={mq ? 'top-right' : 'bottom-right'} />
                     <NavigationProgress />

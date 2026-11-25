@@ -1,6 +1,6 @@
 .stepBlock {
     padding: 12px 0;
-    border-bottom: 1px solid rgb(255 255 255 / 4%);
+    border-bottom: 1px solid var(--app-border);
 }
 
 .stepBlock:last-child {

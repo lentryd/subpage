@@ -1,5 +1,5 @@
 import { ThemeIcon } from '@/shared/ui/ThemeIcon'
-import { getColorGradient, getLocalizedText } from '@/shared/utils/config-parser'
+import { getLocalizedText } from '@/shared/utils/config-parser'
 import { Card, Group, Stack, Text, Title } from '@mantine/core'
 
 import { IBlockRendererProps } from '../rendererBlock.types'
@@ -16,20 +16,21 @@ export const CardsBlockRenderer = ({
     return (
         <Stack gap="sm">
             {blocks.map((block, index) => {
-                const gradientStyle = getColorGradient(block.svgIconColor)
-
                 return (
                     <Card className={classes.root} key={index} p={{ base: 'sm', xs: 'md', sm: 'lg' }} radius="lg">
                         <Group align="flex-start" gap={isMobile ? 'sm' : 'md'} wrap="nowrap">
                             <ThemeIcon
                                 getIconFromLibrary={getIconFromLibrary}
-                                gradientStyle={gradientStyle}
                                 isMobile={isMobile}
-                                svgIconColor={block.svgIconColor}
                                 svgIconKey={block.svgIconKey}
                             />
                             <Stack gap={isMobile ? 'xs' : 'sm'} style={{ flex: 1, minWidth: 0 }}>
-                                <Title c="white" fw={600} order={6} style={{ wordBreak: 'break-word' }}>
+                                <Title
+                                    c="var(--app-text-strong)"
+                                    fw={600}
+                                    order={6}
+                                    style={{ wordBreak: 'break-word' }}
+                                >
                                     <span
                                         dangerouslySetInnerHTML={{
                                             __html: getLocalizedText(block.title, currentLang),
@@ -45,7 +46,7 @@ export const CardsBlockRenderer = ({
                                     />
                                 </Text>
 
-                                {renderBlockButtons(block.buttons, 'light')}
+                                {renderBlockButtons(block.buttons)}
                             </Stack>
                         </Group>
                     </Card>

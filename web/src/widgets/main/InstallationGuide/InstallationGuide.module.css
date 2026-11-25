@@ -14,17 +14,18 @@
     height: 48px;
     min-width: 0;
     overflow: hidden;
-    background: rgb(255 255 255 / 2%);
-    border: 1px solid rgb(255 255 255 / 8%);
-    border-left: 3px solid rgb(255 255 255 / 8%);
+    background: var(--app-surface);
+    border: 1px solid var(--app-border);
     border-radius: var(--mantine-radius-md);
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition:
+        background 0.15s var(--app-ease),
+        border-color 0.15s var(--app-ease);
 }
 
 .appButton:hover {
-    background: rgb(255 255 255 / 5%);
-    border-left-color: rgb(255 255 255 / 25%);
+    background: var(--app-fill);
+    border-color: var(--app-border-strong);
 }
 
 .appButton:hover .bgIcon {
@@ -33,16 +34,12 @@
 
 .appButtonActive,
 .appButtonActive:hover {
-    background: linear-gradient(90deg, rgb(34 211 238 / 12%) 0%, rgb(34 211 238 / 4%) 100%);
-    border-color: rgb(34 211 238 / 20%);
-    border-left-color: var(--mantine-color-cyan-5);
-    box-shadow:
-        inset 4px 0 12px -4px rgb(34 211 238 / 30%),
-        0 0 12px rgb(34 211 238 / 10%);
+    background: color-mix(in srgb, var(--mantine-primary-color-filled) 10%, var(--app-surface));
+    border-color: color-mix(in srgb, var(--mantine-primary-color-filled) 55%, transparent);
 }
 
 .appButtonActive .appName {
-    color: var(--mantine-color-cyan-3);
+    color: var(--mantine-primary-color-filled);
 }
 
 .appButtonActive .bgIcon,
@@ -82,27 +79,26 @@
 .appName {
     position: relative;
     z-index: 1;
-    color: rgb(255 255 255 / 85%);
+    color: var(--app-text-strong);
     font-size: var(--mantine-font-size-md);
     font-weight: 600;
     white-space: nowrap;
 }
 
-.featuredBadge {
-    position: absolute;
-    top: 4px;
-    left: 4px;
-    width: 8px;
-    height: 8px;
-    display: inline-block;
-    opacity: 1;
-    z-index: 0;
-    border-radius: 50%;
-    background: #efbf04;
-    box-shadow: 0 0 6px rgb(239 191 4 / 60%);
+/* App icons ship with a hardcoded near-white fill: flip them on light surfaces */
+/* stylelint-disable-next-line selector-pseudo-class-no-unknown */
+:global([data-mantine-color-scheme='light']) .bgIcon {
+    filter: invert(1);
 }
 
-.appButtonActive .featuredBadge {
-    opacity: 0.8;
-    box-shadow: 0 0 8px rgb(239 191 4 / 40%);
+/* Recommended apps carry a small amber mark, like the original page */
+.featuredBadge {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    z-index: 2;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--mantine-color-yellow-5);
 }

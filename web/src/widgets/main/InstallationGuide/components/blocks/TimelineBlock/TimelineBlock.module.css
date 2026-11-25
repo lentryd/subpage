@@ -1,6 +1,7 @@
 /* Timeline styles */
 .timelineRoot {
-    --tl-line-color: rgb(255 255 255 / 8%);
+    --tl-line-color: var(--app-border-strong);
+    --tl-color: var(--app-border-strong) !important;
 }
 
 .timelineItem {

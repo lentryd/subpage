@@ -1,21 +1,6 @@
-.modalContent {
-    background: rgb(22 27 35 / 95%);
-    backdrop-filter: blur(20px);
-    border: 1px solid rgb(255 255 255 / 10%);
-}
-
-.modalHeader {
-    background: transparent;
-}
-
-.modalTitle {
-    font-weight: 600;
-    color: white;
-}
-
 .keyBox {
-    background: rgb(255 255 255 / 2%);
-    border: 1px solid rgb(255 255 255 / 6%);
+    background: var(--app-surface-2);
+    border: 1px solid var(--app-border);
     border-radius: var(--mantine-radius-md);
 }
 
