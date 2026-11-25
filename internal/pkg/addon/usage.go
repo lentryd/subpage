@@ -131,7 +131,7 @@ func (c *usageCache) fetch(ctx context.Context, u Usage, withLinks bool) (usageD
 	if err != nil {
 		return usageData{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return usageData{}, fmt.Errorf("usage status %d", resp.StatusCode)
 	}
