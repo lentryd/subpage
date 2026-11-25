@@ -5,7 +5,14 @@ export function LoadingScreen({ height = '100%', size = 150 }: { height?: string
     return (
         <Center h={height}>
             <Stack align="center" gap="xs" w="100%">
-                <Spinner inner={size / 3} segments={30} size={size} speed={1_900} strokeLinecap="butt" thickness={2} />
+                <Spinner
+                    inner={size / 3}
+                    segments={30}
+                    size={size}
+                    duration={1_900}
+                    strokeLinecap="butt"
+                    thickness={2}
+                />
             </Stack>
         </Center>
     )
